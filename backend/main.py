@@ -12,9 +12,12 @@ import redis
 import json
 import hashlib
 
-redis_client = redis.Redis(host='redis', port=6379, db=0)
-
 load_dotenv()
+
+# redis_client = redis.Redis(host='redis', port=6379, db=0)
+redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+redis_client = redis.from_url(redis_url)
+
 
 first_name = os.getenv("USER_FIRST_NAME")
 last_name = os.getenv("USER_LAST_NAME")
@@ -25,7 +28,7 @@ app = FastAPI()
 # Middleware preventing invalid access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"], # Change this to the actual origin of frontend later
+    allow_origins=["http://localhost:3000", "https://ai-job-agent.vercel.app"], # Change this to the actual origin of frontend later
     allow_methods=["*"],
     allow_headers=["*"],
 )

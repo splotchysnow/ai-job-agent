@@ -34,7 +34,7 @@ export default function Home() {
     setTailoredBullets(tailorData.tailored_bullets);
     setCached(tailorData.cached);
 
-    const draftRes = await fetch('http://localhost:8000/draft', {
+    const draftRes = await fetch('http://ai-job-agent-production-5cc3.up.railway.app/draft', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
