@@ -12,6 +12,9 @@ import redis
 import json
 import hashlib
 
+from fastapi import Request, HTTPException
+
+
 load_dotenv()
 
 # redis_client = redis.Redis(host='redis', port=6379, db=0)
@@ -42,6 +45,17 @@ client = Anthropic()
 # command: uvicorn main:app --reload
 
 # Health check endpoint sanity check
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    ip = request.client.host
+    key = f"rate:{ip}"
+    count = redis_client.incr(key)
+    if count == 1:
+        redis_client.expire(key, 3600)  # 1 hour window
+    if count > 50:
+        raise HTTPException(status_code=429, detail="Too many requests")
+    return await call_next(request)
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
