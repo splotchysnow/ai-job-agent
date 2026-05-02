@@ -57,6 +57,7 @@ class DraftRequest(BaseModel):
     first_name: str = None
     last_name: str = None
     job_area: str = None
+    output_type: str = "email" # "email" or "linkedin"
 
 class MatchRequest(BaseModel):
     job_description: str
@@ -90,11 +91,15 @@ def tailor_resume(request: TailorRequest):
 
 @app.post("/draft")
 def draft_email(request: DraftRequest):
+    if request.output_type == "cover_letter":
+        system = f"You are a professional cover letter writer. Write a formal, well-structured cover letter for a {request.job_area} job application. Include an opening paragraph, 2-3 body paragraphs highlighting relevant experience, and a closing paragraph. Plain text only, no markdown. Sign off as {request.first_name} {request.last_name}."
+    else:
+        system = f"You are a professional outreach writer. Write a concise, genuine cold outreach email for a {request.job_area} job application. Sound human, not corporate. 2-3 short paragraphs max. No subject line. No markdown formatting — plain text only. Sign off as {request.first_name} {request.last_name}."
+
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=1024,
-        # name = f"{request.first_name} {request.last_name}".strip() or "the applicant",
-        system=f"You are a professional outreach writer. Write a concise, genuine cold outreach email for a {request.job_area} job application. Sound human, not corporate. 2-3 short paragraphs max. No subject line. Sign off as {request.first_name} {request.last_name}.",
+        max_tokens=1024,        
+        system=system,
         messages=[
             {
                 "role": "user",

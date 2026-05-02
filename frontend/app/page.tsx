@@ -17,7 +17,8 @@ export default function Home() {
   const [cached, setCached] = useState(false);
   const [showBullets, setShowBullets] = useState(false);
   const [matchScore, setMatchScore] = useState<{score: number, reason: string} | null>(null);
-
+  const [outputType, setOutputType] = useState<'email' | 'cover_letter'>('email');
+  
   useEffect(() => {
     setFirstName(localStorage.getItem('firstName') || '');
     setLastName(localStorage.getItem('lastName') || '');
@@ -77,10 +78,26 @@ export default function Home() {
     const draftRes = await fetch('https://ai-job-agent-production-5cc3.up.railway.app/draft', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_description: jobDescription, tailored_bullets: bullets, first_name: firstName, last_name: lastName, job_area: jobArea })
+      // body: JSON.stringify({ job_description: jobDescription, tailored_bullets: bullets, first_name: firstName, last_name: lastName, job_area: jobArea })
+      body: JSON.stringify({ 
+        job_description: jobDescription, 
+        tailored_bullets: bullets, 
+        first_name: firstName, 
+        last_name: lastName, 
+        job_area: jobArea,
+        output_type: outputType
+      })
       });
       const draftData = await draftRes.json();
-      setEmail(draftData.email);
+      // Clean up the email get rid of the AI styles.
+      const cleanEmail = draftData.email
+        .replace(/^-{2,}\s*/gm, '')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .trim();
+
+      setEmail(cleanEmail);
+      // setEmail(draftData.email);
       setLoading(false);
     }
     
@@ -161,15 +178,31 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Toggle */}
-          <div className="flex items-center gap-3 mb-4">
-            <button
-              onClick={() => setShowBullets(!showBullets)}
-              className={`w-10 h-6 rounded-full transition-colors ${showBullets ? 'bg-blue-600' : 'bg-gray-700'} relative`}
-            >
-              <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${showBullets ? 'left-5' : 'left-1'}`} />
-            </button>
-            <span className="text-sm text-gray-400">Show tailored bullets</span>
+          {/* Toggles */}
+          <div className="flex items-center gap-6 mb-4">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowBullets(!showBullets)}
+                className={`w-10 h-6 rounded-full transition-colors ${showBullets ? 'bg-blue-600' : 'bg-gray-700'} relative`}
+              >
+                <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${showBullets ? 'left-5' : 'left-1'}`} />
+              </button>
+              <span className="text-sm text-gray-400">Show tailored bullets</span>
+            </div>
+            <div className="flex items-center gap-2 bg-gray-900 rounded-xl p-1 border border-gray-800">
+              <button
+                onClick={() => setOutputType('email')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${outputType === 'email' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                Email
+              </button>
+              <button
+                onClick={() => setOutputType('cover_letter')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${outputType === 'cover_letter' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                Cover Letter
+              </button>
+            </div>
           </div>
 
           {/* Run Button */}
@@ -214,7 +247,9 @@ export default function Home() {
                 {email && (
                   <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
                     <div className="flex justify-between items-center mb-3">
-                      <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Outreach Email</label>
+                    <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+                      {outputType === 'cover_letter' ? 'Cover Letter' : 'Outreach Email'}
+                    </label>
                       <button onClick={() => copyToClipboard(email)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
                     </div>
                     <p className="text-sm text-gray-200 whitespace-pre-wrap">{email}</p>
