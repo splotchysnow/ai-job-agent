@@ -58,6 +58,11 @@ class DraftRequest(BaseModel):
     last_name: str = None
     job_area: str = None
 
+class MatchRequest(BaseModel):
+    job_description: str
+    resume_bullets: str
+    job_area: str
+
 # Posting endpoint for tailoring resume bullets based on job description # EDIT Adding cashing with Redis
 @app.post("/tailor")
 def tailor_resume(request: TailorRequest):
@@ -99,3 +104,23 @@ def draft_email(request: DraftRequest):
     )
     return {"email": message.content[0].text}
 
+@app.post("/match")
+def match_jobs(request: MatchRequest):
+    # Implementation for matching jobs based on user profile and job descriptions
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=512,
+        system="You are a hiring manager. Given a job description and a candidate's resume bullets, score how well the candidate matches the job from 0-100. Be honest and critical. Respond in this exact format:\nSCORE: [number]\nREASON: [2-3 sentences explaining the score, what fits well and what's missing]",
+        messages=[
+            {
+                "role": "user",
+                "content": f"Job Description:\n{request.job_description}\n\nCandidate Resume:\n{request.resume_bullets}"
+            }
+        ]
+    )
+    text = message.content[0].text
+    score_line = [l for l in text.split('\n') if l.startswith('SCORE:')][0]
+    reason_line = [l for l in text.split('\n') if l.startswith('REASON:')][0]
+    score = int(''.join(filter(str.isdigit, score_line)))
+    reason = reason_line.replace('REASON:', '').strip()
+    return {"score": score, "reason": reason}

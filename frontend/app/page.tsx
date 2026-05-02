@@ -15,6 +15,8 @@ export default function Home() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [cached, setCached] = useState(false);
+  const [showBullets, setShowBullets] = useState(false);
+  const [matchScore, setMatchScore] = useState<{score: number, reason: string} | null>(null);
 
   useEffect(() => {
     setFirstName(localStorage.getItem('firstName') || '');
@@ -43,45 +45,43 @@ export default function Home() {
     localStorage.setItem('resumeBullets', val);
   }
 
-  async function runAgent(){
+  async function runAgent() {
     setLoading(true);
     setTailoredBullets('');
     setEmail('');
-    // setCached(false);
+    setMatchScore(null);
 
-    const tailorRes = await fetch('https://ai-job-agent-production-5cc3.up.railway.app/tailor', {
+    // Match score — always runs
+    const matchRes = await fetch('https://ai-job-agent-production-5cc3.up.railway.app/match', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        job_description: jobDescription,
-        resume_bullets: resumeBullets,
-        job_area: jobArea
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_description: jobDescription, resume_bullets: resumeBullets, job_area: jobArea })
     });
-    
-    const tailorData = await tailorRes.json();
-    setTailoredBullets(tailorData.tailored_bullets);
-    setCached(tailorData.cached);
+    const matchData = await matchRes.json();
+    setMatchScore(matchData);
+
+    // Tailored bullets — only if toggle is on
+    let bullets = '';
+    if (showBullets) {
+      const tailorRes = await fetch('https://ai-job-agent-production-5cc3.up.railway.app/tailor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_description: jobDescription, resume_bullets: resumeBullets, job_area: jobArea })
+      });
+      const tailorData = await tailorRes.json();
+      bullets = tailorData.tailored_bullets;
+      setTailoredBullets(bullets);
+      setCached(tailorData.cached);
+    }
 
     const draftRes = await fetch('https://ai-job-agent-production-5cc3.up.railway.app/draft', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        job_description: jobDescription,
-        tailored_bullets: tailorData.tailored_bullets,
-        first_name: firstName,
-        last_name: lastName
-      })
-    });
-
-    const draftData = await draftRes.json();
-    setEmail(draftData.email);
-    setLoading(false);
-
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_description: jobDescription, tailored_bullets: bullets, first_name: firstName, last_name: lastName, job_area: jobArea })
+      });
+      const draftData = await draftRes.json();
+      setEmail(draftData.email);
+      setLoading(false);
     }
     
     function copyToClipboard(text: string){
@@ -161,6 +161,17 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Toggle */}
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={() => setShowBullets(!showBullets)}
+              className={`w-10 h-6 rounded-full transition-colors ${showBullets ? 'bg-blue-600' : 'bg-gray-700'} relative`}
+            >
+              <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${showBullets ? 'left-5' : 'left-1'}`} />
+            </button>
+            <span className="text-sm text-gray-400">Show tailored bullets</span>
+          </div>
+
           {/* Run Button */}
           <button
             onClick={runAgent}
@@ -170,25 +181,47 @@ export default function Home() {
             {loading ? 'Running agent...' : 'Run Agent'}
           </button>
 
-          {/* Output Grid */}
-          {(tailoredBullets || email) && (
-            <div className="grid grid-cols-2 gap-6">
-              <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
-                <div className="flex justify-between items-center mb-3">
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-                    Tailored Bullets {cached && <span className="ml-2 text-green-400">● cached</span>}
-                  </label>
-                  <button onClick={() => copyToClipboard(tailoredBullets)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
+          {/* Output */}
+          {(matchScore || email) && (
+            <div className="flex flex-col gap-6">
+
+              {/* Match Score */}
+              {matchScore && (
+                <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
+                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4 block">Match Score</label>
+                  <div className="flex items-center gap-6">
+                    <div className={`text-5xl font-bold ${matchScore.score >= 70 ? 'text-green-400' : matchScore.score >= 45 ? 'text-yellow-400' : 'text-red-400'}`}>
+                      {matchScore.score}%
+                    </div>
+                    <p className="text-sm text-gray-300 leading-relaxed">{matchScore.reason}</p>
+                  </div>
                 </div>
-                <p className="text-sm text-gray-200 whitespace-pre-wrap">{tailoredBullets}</p>
+              )}
+
+              <div className={`grid gap-6 ${showBullets ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {showBullets && tailoredBullets && (
+                  <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
+                    <div className="flex justify-between items-center mb-3">
+                      <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+                        Tailored Bullets {cached && <span className="ml-2 text-green-400">● cached</span>}
+                      </label>
+                      <button onClick={() => copyToClipboard(tailoredBullets)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
+                    </div>
+                    <p className="text-sm text-gray-200 whitespace-pre-wrap">{tailoredBullets}</p>
+                  </div>
+                )}
+
+                {email && (
+                  <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
+                    <div className="flex justify-between items-center mb-3">
+                      <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Outreach Email</label>
+                      <button onClick={() => copyToClipboard(email)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
+                    </div>
+                    <p className="text-sm text-gray-200 whitespace-pre-wrap">{email}</p>
+                  </div>
+                )}
               </div>
-              <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
-                <div className="flex justify-between items-center mb-3">
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Outreach Email</label>
-                  <button onClick={() => copyToClipboard(email)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
-                </div>
-                <p className="text-sm text-gray-200 whitespace-pre-wrap">{email}</p>
-              </div>
+
             </div>
           )}
 
