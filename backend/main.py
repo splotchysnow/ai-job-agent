@@ -28,7 +28,7 @@ app = FastAPI()
 # Middleware preventing invalid access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://ai-job-agent.vercel.app"], # Change this to the actual origin of frontend later
+    allow_origins=["http://localhost:3000", "https://ai-job-agent-psi.vercel.app"], # Change this to the actual origin of frontend later
     allow_methods=["*"],
     allow_headers=["*"],
 )
