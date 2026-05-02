@@ -49,10 +49,14 @@ def health():
 class TailorRequest(BaseModel):
     job_description: str
     resume_bullets: str
+    job_area: str # EDIT Adding job area for more tailored results
 
 class DraftRequest(BaseModel):
     job_description: str
     tailored_bullets: str = None
+    first_name: str = None
+    last_name: str = None
+    job_area: str = None
 
 # Posting endpoint for tailoring resume bullets based on job description # EDIT Adding cashing with Redis
 @app.post("/tailor")
@@ -66,7 +70,8 @@ def tailor_resume(request: TailorRequest):
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
-        system="You are a resume coach. Given resume bullets and a job description, rewrite and select the most relevant bullets tailored to the job. Output 4-6 strong bullet points starting with action verbs. Output only the bullets, no preamble.",
+        system=f"You are a resume coach specializing in {request.job_area}. Given resume bullets and a job description, rewrite and select the most relevant bullets tailored to the job. Output 4-6 strong bullet points starting with action verbs. Label each bullet with the company/experience it comes from in brackets before the bullet, like [SOL Automatic]. Output only the bullets, no preamble.",
+
         messages=[
             {
                 "role": "user",
@@ -83,7 +88,8 @@ def draft_email(request: DraftRequest):
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
-        system=f"You are a professional outreach writer. Write a concise, genuine cold outreach email for a software engineering job application. Sound human, not corporate. 2-3 short paragraphs max. No subject line. Sign off as {first_name} {last_name}.",
+        # name = f"{request.first_name} {request.last_name}".strip() or "the applicant",
+        system=f"You are a professional outreach writer. Write a concise, genuine cold outreach email for a {request.job_area} job application. Sound human, not corporate. 2-3 short paragraphs max. No subject line. Sign off as {request.first_name} {request.last_name}.",
         messages=[
             {
                 "role": "user",
