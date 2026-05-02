@@ -19,7 +19,7 @@ export default function Home() {
     setEmail('');
     // setCached(false);
 
-    const tailorRes = await fetch('http://localhost:8000/tailor', {
+    const tailorRes = await fetch('https://ai-job-agent-production-5cc3.up.railway.app/tailor', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
