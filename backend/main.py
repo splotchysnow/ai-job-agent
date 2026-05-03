@@ -38,6 +38,7 @@ async def rate_limit(request: Request, call_next):
 def get_client(x_api_key: str | None = Header(default=None)) -> Anthropic:
     return Anthropic(api_key=x_api_key or os.getenv("ANTHROPIC_API_KEY"))
 
+# Liveness check — used by Railway and Docker to confirm the server is up.
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -65,9 +66,12 @@ class MatchRequest(BaseModel):
     resume_bullets: str
     job_area: str
 
+# Rewrites the user's master resume bullets to be more relevant to a specific job description.
+# Returns 4-6 action-verb bullets labelled with the originating company/role.
+# Redis-cached for 1hr — same job + same bullets + same area always produces the same output.
 @app.post("/tailor")
 def tailor_resume(request: TailorRequest, client: Anthropic = Depends(get_client)):
-    cache_key = hashlib.md5(f"{request.job_description}+{request.resume_bullets}+{request.job_area}".encode()).hexdigest()
+    cache_key = "tailor:" + hashlib.md5(f"{request.job_description}+{request.resume_bullets}+{request.job_area}".encode()).hexdigest()
     cached = redis_client.get(cache_key)
     if cached:
         return {"tailored_bullets": json.loads(cached), "cached": True}
@@ -82,6 +86,8 @@ def tailor_resume(request: TailorRequest, client: Anthropic = Depends(get_client
     redis_client.setex(cache_key, 3600, json.dumps(result))
     return {"tailored_bullets": result, "cached": False}
 
+# Generates a personalized cold outreach email or formal cover letter.
+# Weaves in company research when provided. Not cached — output is personalized to the user's name and preferences.
 @app.post("/draft")
 def draft_email(request: DraftRequest, client: Anthropic = Depends(get_client)):
     research_instruction = (
@@ -111,8 +117,15 @@ def draft_email(request: DraftRequest, client: Anthropic = Depends(get_client)):
     )
     return {"email": message.content[0].text}
 
+# Extracts job title and company name from a raw job description.
+# Redis-cached for 24hr — the same job posting always contains the same metadata.
 @app.post("/extract-job-info")
 def extract_job_info(request: ExtractJobInfoRequest, client: Anthropic = Depends(get_client)):
+    cache_key = "jobinfo:" + hashlib.md5(request.job_description.encode()).hexdigest()
+    cached = redis_client.get(cache_key)
+    if cached:
+        return json.loads(cached)
+
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=64,
@@ -129,14 +142,24 @@ def extract_job_info(request: ExtractJobInfoRequest, client: Anthropic = Depends
         elif line.startswith('COMPANY:'):
             val = line.replace('COMPANY:', '').strip()
             company_name = None if val.lower() in ('null', 'unknown', 'n/a', '') else val
-    return {"job_title": job_title, "company_name": company_name}
+    result = {"job_title": job_title, "company_name": company_name}
+    redis_client.setex(cache_key, 86400, json.dumps(result))
+    return result
 
 class ResearchRequest(BaseModel):
     company_name: str
     job_area: str = None
 
+# Looks up a company using Claude's web_search tool and returns a plain-prose summary
+# covering what they do, company stage, culture, and recent news.
+# Redis-cached for 24hr — company info is stable and web search is expensive.
 @app.post("/research")
 def research_company(request: ResearchRequest, client: Anthropic = Depends(get_client)):
+    cache_key = "research:" + hashlib.md5(f"{request.company_name}+{request.job_area or ''}".encode()).hexdigest()
+    cached = redis_client.get(cache_key)
+    if cached:
+        return json.loads(cached)
+
     messages = [{
         "role": "user",
         "content": f"Research the company '{request.company_name}'. Summarize: what they do, their products/services, company size and stage, culture/values, and any recent notable news or initiatives. Keep it to 150-200 words."
@@ -159,7 +182,9 @@ def research_company(request: ResearchRequest, client: Anthropic = Depends(get_c
                 .replace('# ', '')
                 .replace('* ', '')
                 .strip())
-            return {"summary": text}
+            result = {"summary": text}
+            redis_client.setex(cache_key, 86400, json.dumps(result))
+            return result
         messages.append({"role": "assistant", "content": response.content})
         tool_results = [
             {"type": "tool_result", "tool_use_id": block.id, "content": ""}
@@ -171,6 +196,8 @@ def research_company(request: ResearchRequest, client: Anthropic = Depends(get_c
 
     return {"summary": "Unable to research this company at this time."}
 
+# Accepts a PDF or DOCX resume upload and returns the extracted plain text.
+# Not cached — file content varies per upload.
 @app.post("/extract")
 async def extract_text(file: UploadFile = File(...)):
     content = await file.read()
@@ -189,8 +216,16 @@ async def extract_text(file: UploadFile = File(...)):
 
     return {"text": text.strip()}
 
+# Scores how well a candidate's resume matches a job description from 0-100,
+# with a 2-3 sentence plain-English explanation of what fits and what's missing.
+# Redis-cached for 1hr — same job + same resume always yields the same score.
 @app.post("/match")
 def match_jobs(request: MatchRequest, client: Anthropic = Depends(get_client)):
+    cache_key = "match:" + hashlib.md5(f"{request.job_description}+{request.resume_bullets}+{request.job_area}".encode()).hexdigest()
+    cached = redis_client.get(cache_key)
+    if cached:
+        return json.loads(cached)
+
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=512,
@@ -202,4 +237,6 @@ def match_jobs(request: MatchRequest, client: Anthropic = Depends(get_client)):
     reason_line = [l for l in text.split('\n') if l.startswith('REASON:')][0]
     score = int(''.join(filter(str.isdigit, score_line)))
     reason = reason_line.replace('REASON:', '').strip()
-    return {"score": score, "reason": reason}
+    result = {"score": score, "reason": reason}
+    redis_client.setex(cache_key, 3600, json.dumps(result))
+    return result

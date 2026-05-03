@@ -212,7 +212,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white p-8">
+    <main className="min-h-screen bg-gray-950 text-white p-8 select-none">
       <div className="max-w-6xl mx-auto">
 
         {/* Header */}
@@ -226,7 +226,7 @@ export default function Home() {
           <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800">
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">First Name</label>
             <input
-              className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
+              className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors select-text"
               placeholder="first_name_here"
               value={firstName}
               onChange={e => handleFirstNameChange(e.target.value)}
@@ -235,7 +235,7 @@ export default function Home() {
           <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800">
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">Last Name</label>
             <input
-              className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
+              className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors select-text"
               placeholder="last_name_here"
               value={lastName}
               onChange={e => handleLastNameChange(e.target.value)}
@@ -244,7 +244,7 @@ export default function Home() {
           <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800">
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">Job Area</label>
             <select
-              className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
+              className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors select-text"
               value={jobArea}
               onChange={e => handleJobAreaChange(e.target.value)}
             >
@@ -266,7 +266,7 @@ export default function Home() {
             Anthropic API Key <span className="text-gray-600 normal-case font-normal tracking-normal">(optional — uses shared key if blank)</span>
           </label>
           <input
-            className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors font-mono"
+            className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors font-mono select-text"
             placeholder="sk-ant-..."
             type="password"
             value={apiKey}
@@ -281,7 +281,7 @@ export default function Home() {
           <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3 block">Job Description</label>
             <textarea
-              className="w-full bg-gray-800 rounded-xl p-4 text-sm text-gray-100 resize-none outline-none border border-gray-700 focus:border-blue-500 transition-colors"
+              className="w-full bg-gray-800 rounded-xl p-4 text-sm text-gray-100 resize-none outline-none border border-gray-700 focus:border-blue-500 transition-colors select-text"
               rows={10}
               placeholder="Paste the job description here..."
               value={jobDescription}
@@ -295,7 +295,7 @@ export default function Home() {
                   Job Title {extracting && <span className="text-gray-600">· detecting...</span>}
                 </label>
                 <input
-                  className="w-full bg-gray-800 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
+                  className="w-full bg-gray-800 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none border border-gray-700 focus:border-blue-500 transition-colors select-text"
                   placeholder="auto-detected"
                   value={jobTitle}
                   onChange={e => setJobTitle(e.target.value)}
@@ -306,7 +306,7 @@ export default function Home() {
                   Company {extracting && <span className="text-gray-600">· detecting...</span>}
                 </label>
                 <input
-                  className="w-full bg-gray-800 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
+                  className="w-full bg-gray-800 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none border border-gray-700 focus:border-blue-500 transition-colors select-text"
                   placeholder="auto-detected"
                   value={companyName}
                   onChange={e => setCompanyName(e.target.value)}
@@ -329,7 +329,7 @@ export default function Home() {
               <input ref={fileInputRef} type="file" accept=".pdf,.docx" className="hidden" onChange={handleFileImport} />
             </div>
             <textarea
-              className="w-full bg-gray-800 rounded-xl p-4 text-sm text-gray-100 resize-none outline-none border border-gray-700 focus:border-blue-500 transition-colors"
+              className="w-full bg-gray-800 rounded-xl p-4 text-sm text-gray-100 resize-none outline-none border border-gray-700 focus:border-blue-500 transition-colors select-text"
               rows={10}
               placeholder="Paste your master resume bullets here..."
               value={resumeBullets}
@@ -347,7 +347,7 @@ export default function Home() {
               </label>
               <button onClick={() => setCompanyResearch(null)} className="text-xs text-gray-500 hover:text-gray-400 transition-colors">dismiss</button>
             </div>
-            <p className="text-sm text-gray-200 leading-relaxed">{companyResearch}</p>
+            <p className="text-sm text-gray-200 leading-relaxed select-text">{companyResearch}</p>
           </div>
         )}
 
@@ -378,11 +378,11 @@ export default function Home() {
           <button
             onClick={researchCompany}
             disabled={researching || !companyName}
-            className="px-4 py-1.5 rounded-lg text-sm font-medium bg-gray-900 border border-gray-800 text-gray-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-1.5 rounded-lg text-sm font-medium bg-gray-900 border border-gray-800 text-gray-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors justify-end ml-auto"
           >
             {researching ? 'Researching...' : 'Research Company'}
           </button>
-          <div className="flex items-center gap-2 bg-gray-900 rounded-xl p-1 border border-gray-800">
+          <div className="flex items-center gap-2 bg-gray-900 rounded-xl p-1 border border-gray-800 justify-end ml-auto">
             <button
               onClick={() => setOutputType('email')}
               className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${outputType === 'email' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
@@ -417,7 +417,7 @@ export default function Home() {
                   <div className={`text-5xl font-bold ${matchScore.score >= 70 ? 'text-green-400' : matchScore.score >= 45 ? 'text-yellow-400' : 'text-red-400'}`}>
                     {matchScore.score}%
                   </div>
-                  <p className="text-sm text-gray-300 leading-relaxed">{matchScore.reason}</p>
+                  <p className="text-sm text-gray-300 leading-relaxed select-text">{matchScore.reason}</p>
                 </div>
               </div>
             )}
@@ -431,7 +431,7 @@ export default function Home() {
                     </label>
                     <button onClick={() => copyToClipboard(tailoredBullets)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
                   </div>
-                  <p className="text-sm text-gray-200 whitespace-pre-wrap">{tailoredBullets}</p>
+                  <p className="text-sm text-gray-200 whitespace-pre-wrap select-text">{tailoredBullets}</p>
                 </div>
               )}
 
@@ -443,7 +443,7 @@ export default function Home() {
                     </label>
                     <button onClick={() => copyToClipboard(email)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
                   </div>
-                  <p className="text-sm text-gray-200 whitespace-pre-wrap">{email}</p>
+                  <p className="text-sm text-gray-200 whitespace-pre-wrap select-text">{email}</p>
                 </div>
               )}
             </div>
@@ -464,7 +464,7 @@ export default function Home() {
               {history.slice(historyPage * HISTORY_PAGE_SIZE, (historyPage + 1) * HISTORY_PAGE_SIZE).map(entry => (
                 <div key={entry.id} className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
                   <button
-                    className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-800 transition-colors"
+                    className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-800 transition-colors select-none"
                     onClick={() => setExpandedHistory(expandedHistory === entry.id ? null : entry.id)}
                   >
                     <div>
@@ -490,7 +490,7 @@ export default function Home() {
                             <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Company Research</label>
                             <button onClick={() => copyToClipboard(entry.companyResearch!)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
                           </div>
-                          <p className="text-sm text-gray-300 leading-relaxed">{entry.companyResearch}</p>
+                          <p className="text-sm text-gray-300 leading-relaxed select-text">{entry.companyResearch}</p>
                         </div>
                       )}
 
@@ -500,7 +500,7 @@ export default function Home() {
                             <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Tailored Bullets</label>
                             <button onClick={() => copyToClipboard(entry.tailoredBullets)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
                           </div>
-                          <p className="text-sm text-gray-300 whitespace-pre-wrap">{entry.tailoredBullets}</p>
+                          <p className="text-sm text-gray-300 whitespace-pre-wrap select-text">{entry.tailoredBullets}</p>
                         </div>
                       )}
 
@@ -511,7 +511,7 @@ export default function Home() {
                           </label>
                           <button onClick={() => copyToClipboard(entry.email)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
                         </div>
-                        <p className="text-sm text-gray-200 whitespace-pre-wrap">{entry.email}</p>
+                        <p className="text-sm text-gray-200 whitespace-pre-wrap select-text">{entry.email}</p>
                       </div>
 
                       {entry.jobDescription && (
