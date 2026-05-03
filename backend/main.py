@@ -83,14 +83,20 @@ def tailor_resume(request: TailorRequest, client: Anthropic = Depends(get_client
 
 @app.post("/draft")
 def draft_email(request: DraftRequest, client: Anthropic = Depends(get_client)):
-    if request.output_type == "cover_letter":
-        system = f"You are a professional cover letter writer. Write a formal, well-structured cover letter for a {request.job_area} job application. Include an opening paragraph, 2-3 body paragraphs highlighting relevant experience, and a closing paragraph. Plain text only, no markdown. Sign off as {request.first_name} {request.last_name}."
-    else:
-        system = f"You are a professional outreach writer. Write a concise, genuine cold outreach email for a {request.job_area} job application. Sound human, not corporate. 2-3 short paragraphs max. No subject line. No markdown formatting — plain text only. Sign off as {request.first_name} {request.last_name}."
+    research_instruction = (
+        " Company research is provided — weave in 1-2 specific details naturally to show genuine interest. Don't list facts; make them feel organic to the message."
+        if request.company_research else ""
+    )
 
-    content = f"Job description:\n{request.job_description}\n\nMy tailored resume highlights:\n{request.tailored_bullets}"
+    if request.output_type == "cover_letter":
+        system = f"You are a professional cover letter writer. Write a formal, well-structured cover letter for a {request.job_area} job application. Include an opening paragraph, 2-3 body paragraphs highlighting relevant experience and why this company specifically, and a closing paragraph. Plain text only, no markdown. Sign off as {request.first_name} {request.last_name}.{research_instruction}"
+    else:
+        system = f"You are a professional outreach writer. Write a concise, genuine cold outreach email for a {request.job_area} job application. Sound human, not corporate. 2-3 short paragraphs max. No subject line. No markdown — plain text only. Sign off as {request.first_name} {request.last_name}.{research_instruction}"
+
+    content = f"Job description:\n{request.job_description}"
     if request.company_research:
-        content += f"\n\nCompany research (use this to personalise the message):\n{request.company_research}"
+        content += f"\n\nAbout the company:\n{request.company_research}"
+    content += f"\n\nMy relevant experience and highlights:\n{request.tailored_bullets}"
 
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
