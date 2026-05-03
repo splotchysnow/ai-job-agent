@@ -135,13 +135,28 @@ def research_company(request: ResearchRequest, client: Anthropic = Depends(get_c
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=1024,
+            system="You are a company research assistant. Write in plain prose only — no markdown, no headers, no bold, no bullet points. Just clean paragraphs.",
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=messages
         )
         if response.stop_reason == "end_turn":
             text = next((b.text for b in response.content if hasattr(b, 'text')), '')
+            text = (text
+                .replace('**', '')
+                .replace('__', '')
+                .replace('## ', '')
+                .replace('# ', '')
+                .replace('* ', '')
+                .strip())
             return {"summary": text}
         messages.append({"role": "assistant", "content": response.content})
+        tool_results = [
+            {"type": "tool_result", "tool_use_id": block.id, "content": ""}
+            for block in response.content
+            if block.type == "tool_use"
+        ]
+        if tool_results:
+            messages.append({"role": "user", "content": tool_results})
 
     return {"summary": "Unable to research this company at this time."}
 
