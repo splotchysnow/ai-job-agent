@@ -41,6 +41,8 @@ export default function Home() {
   const [importing, setImporting] = useState(false);
   const [matchThreshold, setMatchThreshold] = useState(65);
   const [awaitingProceed, setAwaitingProceed] = useState(false);
+  const [usedResume, setUsedResume] = useState('');
+  const [showUsedResume, setShowUsedResume] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
   const [historyPage, setHistoryPage] = useState(0);
@@ -131,15 +133,45 @@ export default function Home() {
     const file = e.target.files?.[0];
     if (!file) return;
     setImporting(true);
+
     const formData = new FormData();
     formData.append('file', file);
     const headers: Record<string, string> = {};
     if (apiKey) headers['X-API-Key'] = apiKey;
     const res = await fetch(`${API_BASE}/extract`, { method: 'POST', headers, body: formData });
     const data = await res.json();
-    handleResumeBulletsChange(data.text);
+    const rawText = data.text;
+
+    const storedRaw = localStorage.getItem('resumeRaw');
+    const storedCleaned = localStorage.getItem('resumeCleaned');
+    if (storedRaw === rawText && storedCleaned) {
+      handleResumeBulletsChange(storedCleaned);
+      setImporting(false);
+      e.target.value = '';
+      return;
+    }
+
+    const cleanRes = await fetch(`${API_BASE}/clean-resume`, {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ resume_text: rawText }),
+    });
+    const cleanData = await cleanRes.json();
+    localStorage.setItem('resumeRaw', rawText);
+    localStorage.setItem('resumeCleaned', cleanData.cleaned);
+    handleResumeBulletsChange(cleanData.cleaned);
+
     setImporting(false);
     e.target.value = '';
+  }
+
+  function effectiveResume(): string {
+    const storedRaw = localStorage.getItem('resumeRaw');
+    const storedCleaned = localStorage.getItem('resumeCleaned');
+    if (storedRaw && storedCleaned && resumeBullets.trim() === storedRaw.trim()) {
+      return storedCleaned;
+    }
+    return resumeBullets;
   }
 
   async function runAgent() {
@@ -149,10 +181,13 @@ export default function Home() {
     setMatchScore(null);
     setAwaitingProceed(false);
 
+    const resume = effectiveResume();
+    setUsedResume(resume);
+    setShowUsedResume(false);
     const matchRes = await fetch(`${API_BASE}/match`, {
       method: 'POST',
       headers: apiHeaders(),
-      body: JSON.stringify({ job_description: jobDescription, resume_bullets: resumeBullets, job_area: jobArea }),
+      body: JSON.stringify({ job_description: jobDescription, resume_bullets: resume, job_area: jobArea }),
     });
     const matchData = await matchRes.json();
     setMatchScore(matchData);
@@ -163,10 +198,10 @@ export default function Home() {
       return;
     }
 
-    await continuePipeline(matchData);
+    await continuePipeline(matchData, resume);
   }
 
-  async function continuePipeline(matchData: { score: number; reason: string }) {
+  async function continuePipeline(matchData: { score: number; reason: string }, resume: string) {
     setAwaitingProceed(false);
     setLoading(true);
 
@@ -175,7 +210,7 @@ export default function Home() {
       const tailorRes = await fetch(`${API_BASE}/tailor`, {
         method: 'POST',
         headers: apiHeaders(),
-        body: JSON.stringify({ job_description: jobDescription, resume_bullets: resumeBullets, job_area: jobArea }),
+        body: JSON.stringify({ job_description: jobDescription, resume_bullets: resume, job_area: jobArea }),
       });
       const tailorData = await tailorRes.json();
       bullets = tailorData.tailored_bullets;
@@ -188,7 +223,7 @@ export default function Home() {
       headers: apiHeaders(),
       body: JSON.stringify({
         job_description: jobDescription,
-        tailored_bullets: bullets || resumeBullets,
+        tailored_bullets: bullets || resume,
         first_name: firstName,
         last_name: lastName,
         job_area: jobArea,
@@ -463,7 +498,7 @@ export default function Home() {
                     </p>
                     <div className="flex gap-3">
                       <button
-                        onClick={() => continuePipeline(matchScore)}
+                        onClick={() => continuePipeline(matchScore!, effectiveResume())}
                         className="px-4 py-1.5 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors"
                       >
                         Proceed
@@ -475,6 +510,23 @@ export default function Home() {
                         Cancel
                       </button>
                     </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {usedResume && (
+              <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
+                <button
+                  className="w-full flex items-center justify-between px-6 py-3 text-left hover:bg-gray-800 transition-colors"
+                  onClick={() => setShowUsedResume(v => !v)}
+                >
+                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest pointer-events-none">Resume used in this run</label>
+                  <span className="text-gray-600 text-xs">{showUsedResume ? '▲' : '▼'}</span>
+                </button>
+                {showUsedResume && (
+                  <div className="px-6 pb-5 border-t border-gray-800">
+                    <p className="text-sm text-gray-300 whitespace-pre-wrap select-text mt-4">{usedResume}</p>
                   </div>
                 )}
               </div>

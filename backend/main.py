@@ -146,9 +146,32 @@ def extract_job_info(request: ExtractJobInfoRequest, client: Anthropic = Depends
     redis_client.setex(cache_key, 86400, json.dumps(result))
     return result
 
+class CleanResumeRequest(BaseModel):
+    resume_text: str
+
 class ResearchRequest(BaseModel):
     company_name: str
     job_area: str = None
+
+# Strips a full resume down to experience bullets grouped by company and role.
+# Removes contact info, summary, education, and skills sections to cut token noise on every run.
+# Redis-cached for 7 days — same resume text always produces the same cleaned output.
+@app.post("/clean-resume")
+def clean_resume(request: CleanResumeRequest, client: Anthropic = Depends(get_client)):
+    cache_key = "cleanresume:" + hashlib.md5(request.resume_text.encode()).hexdigest()
+    cached = redis_client.get(cache_key)
+    if cached:
+        return json.loads(cached)
+
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1024,
+        system="Extract the work experience bullet points from this resume. For each role, write the company name and job title as a label in brackets (e.g. [NewBeeDrone — Full Stack Engineer]), then list the bullet points underneath. Keep all specific achievements, metrics, and technical details. Skip contact information, summary, education, and skills sections. Output only the formatted bullets, no preamble.",
+        messages=[{"role": "user", "content": request.resume_text}]
+    )
+    result = {"cleaned": message.content[0].text}
+    redis_client.setex(cache_key, 86400 * 7, json.dumps(result))
+    return result
 
 # Looks up a company using Claude's web_search tool and returns a plain-prose summary
 # covering what they do, company stage, culture, and recent news.
