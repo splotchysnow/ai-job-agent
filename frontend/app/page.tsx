@@ -43,6 +43,8 @@ export default function Home() {
   const [awaitingProceed, setAwaitingProceed] = useState(false);
   const [usedResume, setUsedResume] = useState('');
   const [showUsedResume, setShowUsedResume] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
   const [historyPage, setHistoryPage] = useState(0);
@@ -261,8 +263,16 @@ export default function Home() {
     localStorage.setItem('jobHistory', JSON.stringify(newHistory));
   }
 
-  function copyToClipboard(text: string) {
+  function copyToClipboard(text: string, key: string) {
     navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  }
+
+  function scoreColor(score: number): string {
+    if (score >= matchThreshold) return 'text-green-400';
+    if (score >= matchThreshold - 20) return 'text-yellow-400';
+    return 'text-red-400';
   }
 
   function clearHistory() {
@@ -278,7 +288,7 @@ export default function Home() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white">Job Application Agent</h1>
-          <p className="text-gray-400 mt-1">Paste a job description and get tailored bullets and an outreach email instantly.</p>
+          <p className="text-gray-500 mt-1 text-sm">Paste a job description, drop in your resume, and get a match score and outreach email in seconds.</p>
         </div>
 
         {/* User Info Row */}
@@ -287,7 +297,7 @@ export default function Home() {
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">First Name</label>
             <input
               className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors select-text"
-              placeholder="first_name_here"
+              placeholder="First name"
               value={firstName}
               onChange={e => handleFirstNameChange(e.target.value)}
             />
@@ -296,7 +306,7 @@ export default function Home() {
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">Last Name</label>
             <input
               className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors select-text"
-              placeholder="last_name_here"
+              placeholder="Last name"
               value={lastName}
               onChange={e => handleLastNameChange(e.target.value)}
             />
@@ -320,20 +330,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* API Key Row */}
-        <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 mb-6">
-          <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">
-            Anthropic API Key <span className="text-gray-600 normal-case font-normal tracking-normal">(optional — uses shared key if blank)</span>
-          </label>
-          <input
-            className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors font-mono select-text"
-            placeholder="sk-ant-..."
-            type="password"
-            value={apiKey}
-            onChange={e => handleApiKeyChange(e.target.value)}
-          />
-        </div>
-
         {/* Input Grid */}
         <div className="grid grid-cols-2 gap-6 mb-4">
 
@@ -348,7 +344,6 @@ export default function Home() {
               onChange={e => setJobDescription(e.target.value)}
               onBlur={extractJobInfo}
             />
-            {/* Extracted job metadata */}
             <div className="mt-4 pt-4 border-t border-gray-800 grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-gray-500 mb-1.5 block">
@@ -375,10 +370,10 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Resume Bullets */}
+          {/* Resume */}
           <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
             <div className="flex justify-between items-center mb-3">
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Resume Bullets</label>
+              <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Resume</label>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={importing}
@@ -391,7 +386,7 @@ export default function Home() {
             <textarea
               className="w-full bg-gray-800 rounded-xl p-4 text-sm text-gray-100 resize-none outline-none border border-gray-700 focus:border-blue-500 transition-colors select-text"
               rows={10}
-              placeholder="Paste your master resume bullets here..."
+              placeholder="Paste your resume bullets here, or import a PDF / DOCX above..."
               value={resumeBullets}
               onChange={e => handleResumeBulletsChange(e.target.value)}
             />
@@ -411,50 +406,29 @@ export default function Home() {
           </div>
         )}
 
-        {/* Toggles */}
-        <div className="flex items-center gap-6 mb-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-400">Min. score</span>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              value={matchThreshold}
-              onChange={e => handleThresholdChange(Number(e.target.value))}
-              className="w-14 bg-gray-800 rounded-lg px-2 py-1 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors text-center select-text"
-            />
-            <span className="text-sm text-gray-400">%</span>
-          </div>
-          <div className="flex items-center gap-3">
+        {/* Action Bar */}
+        <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-2.5">
             <button
               onClick={() => setShowBullets(!showBullets)}
-              className={`w-10 h-6 rounded-full transition-colors ${showBullets ? 'bg-blue-600' : 'bg-gray-700'} relative`}
+              className={`w-10 h-6 rounded-full transition-colors flex-shrink-0 relative ${showBullets ? 'bg-blue-600' : 'bg-gray-700'}`}
             >
               <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${showBullets ? 'left-5' : 'left-1'}`} />
             </button>
             <span className="text-sm text-gray-400">Show tailored bullets</span>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                const next = !autoExtract;
-                setAutoExtract(next);
-                localStorage.setItem('autoExtract', String(next));
-              }}
-              className={`w-10 h-6 rounded-full transition-colors ${autoExtract ? 'bg-blue-600' : 'bg-gray-700'} relative`}
-            >
-              <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${autoExtract ? 'left-5' : 'left-1'}`} />
-            </button>
-            <span className="text-sm text-gray-400">Auto-extract job info</span>
-          </div>
+
+          <div className="flex-1" />
+
           <button
             onClick={researchCompany}
             disabled={researching || !companyName}
-            className="px-4 py-1.5 rounded-lg text-sm font-medium bg-gray-900 border border-gray-800 text-gray-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors justify-end ml-auto"
+            className="px-4 py-1.5 rounded-lg text-sm font-medium border border-gray-700 text-gray-300 hover:text-white hover:border-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {researching ? 'Researching...' : 'Research Company'}
           </button>
-          <div className="flex items-center gap-2 bg-gray-900 rounded-xl p-1 border border-gray-800 justify-end ml-auto">
+
+          <div className="flex items-center gap-1 bg-gray-900 rounded-xl p-1 border border-gray-800">
             <button
               onClick={() => setOutputType('email')}
               className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${outputType === 'email' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
@@ -468,7 +442,59 @@ export default function Home() {
               Cover Letter
             </button>
           </div>
+
+          <button
+            onClick={() => setShowSettings(v => !v)}
+            title="Settings"
+            className={`w-9 h-9 rounded-xl flex items-center justify-center text-base transition-colors border ${showSettings ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'}`}
+          >
+            ⚙
+          </button>
         </div>
+
+        {/* Settings Panel */}
+        {showSettings && (
+          <div className="bg-gray-900 rounded-2xl border border-gray-800 p-5 mb-3 grid grid-cols-3 gap-5">
+            <div>
+              <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">
+                API Key <span className="text-gray-600 normal-case font-normal tracking-normal">(optional)</span>
+              </label>
+              <input
+                className="w-full bg-gray-800 rounded-xl px-3 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors font-mono select-text"
+                placeholder="sk-ant-..."
+                type="password"
+                value={apiKey}
+                onChange={e => handleApiKeyChange(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col justify-center">
+              <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3 block">Auto-extract Job Info</label>
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={() => { const next = !autoExtract; setAutoExtract(next); localStorage.setItem('autoExtract', String(next)); }}
+                  className={`w-10 h-6 rounded-full transition-colors flex-shrink-0 relative ${autoExtract ? 'bg-blue-600' : 'bg-gray-700'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${autoExtract ? 'left-5' : 'left-1'}`} />
+                </button>
+                <span className="text-sm text-gray-400">{autoExtract ? 'Enabled' : 'Disabled'}</span>
+              </div>
+            </div>
+            <div className="flex flex-col justify-center">
+              <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3 block">Min. Match Score</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={matchThreshold}
+                  onChange={e => handleThresholdChange(Number(e.target.value))}
+                  className="w-16 bg-gray-800 rounded-xl px-3 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors text-center select-text"
+                />
+                <span className="text-sm text-gray-400">%</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Run Button */}
         <button
@@ -481,21 +507,19 @@ export default function Home() {
 
         {/* Output */}
         {(matchScore || email) && (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-4">
             {matchScore && (
               <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
                 <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4 block">Match Score</label>
                 <div className="flex items-center gap-6">
-                  <div className={`text-5xl font-bold ${matchScore.score >= 70 ? 'text-green-400' : matchScore.score >= 45 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  <div className={`text-5xl font-bold tabular-nums ${scoreColor(matchScore.score)}`}>
                     {matchScore.score}%
                   </div>
                   <p className="text-sm text-gray-300 leading-relaxed select-text">{matchScore.reason}</p>
                 </div>
                 {awaitingProceed && (
                   <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between">
-                    <p className="text-sm text-yellow-400">
-                      Score is below your {matchThreshold}% threshold. Proceed anyway?
-                    </p>
+                    <p className="text-sm text-yellow-400">Score is below your {matchThreshold}% threshold. Proceed anyway?</p>
                     <div className="flex gap-3">
                       <button
                         onClick={() => continuePipeline(matchScore!, effectiveResume())}
@@ -512,34 +536,35 @@ export default function Home() {
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-
-            {usedResume && (
-              <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
-                <button
-                  className="w-full flex items-center justify-between px-6 py-3 text-left hover:bg-gray-800 transition-colors"
-                  onClick={() => setShowUsedResume(v => !v)}
-                >
-                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest pointer-events-none">Resume used in this run</label>
-                  <span className="text-gray-600 text-xs">{showUsedResume ? '▲' : '▼'}</span>
-                </button>
-                {showUsedResume && (
-                  <div className="px-6 pb-5 border-t border-gray-800">
-                    <p className="text-sm text-gray-300 whitespace-pre-wrap select-text mt-4">{usedResume}</p>
+                {usedResume && (
+                  <div className="mt-4 pt-3 border-t border-gray-800">
+                    <button
+                      onClick={() => setShowUsedResume(v => !v)}
+                      className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                    >
+                      {showUsedResume ? '▲ hide resume sent' : '▼ show resume sent to Claude'}
+                    </button>
+                    {showUsedResume && (
+                      <p className="text-xs text-gray-400 whitespace-pre-wrap select-text mt-3 leading-relaxed">{usedResume}</p>
+                    )}
                   </div>
                 )}
               </div>
             )}
 
-            <div className={`grid gap-6 ${showBullets ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            <div className={`grid gap-4 ${showBullets && tailoredBullets ? 'grid-cols-2' : 'grid-cols-1'}`}>
               {showBullets && tailoredBullets && (
                 <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
                   <div className="flex justify-between items-center mb-3">
                     <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
                       Tailored Bullets {cached && <span className="ml-2 text-green-400">● cached</span>}
                     </label>
-                    <button onClick={() => copyToClipboard(tailoredBullets)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
+                    <button
+                      onClick={() => copyToClipboard(tailoredBullets, 'bullets')}
+                      className={`text-xs transition-colors ${copiedKey === 'bullets' ? 'text-green-400' : 'text-blue-400 hover:text-blue-300'}`}
+                    >
+                      {copiedKey === 'bullets' ? '✓ copied' : 'copy'}
+                    </button>
                   </div>
                   <p className="text-sm text-gray-200 whitespace-pre-wrap select-text">{tailoredBullets}</p>
                 </div>
@@ -551,7 +576,12 @@ export default function Home() {
                     <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
                       {outputType === 'cover_letter' ? 'Cover Letter' : 'Outreach Email'}
                     </label>
-                    <button onClick={() => copyToClipboard(email)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
+                    <button
+                      onClick={() => copyToClipboard(email, 'email')}
+                      className={`text-xs transition-colors ${copiedKey === 'email' ? 'text-green-400' : 'text-blue-400 hover:text-blue-300'}`}
+                    >
+                      {copiedKey === 'email' ? '✓ copied' : 'copy'}
+                    </button>
                   </div>
                   <p className="text-sm text-gray-200 whitespace-pre-wrap select-text">{email}</p>
                 </div>
@@ -577,14 +607,14 @@ export default function Home() {
                     className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-800 transition-colors select-none"
                     onClick={() => setExpandedHistory(expandedHistory === entry.id ? null : entry.id)}
                   >
-                    <div>
+                    <div className="min-w-0">
                       <span className="font-medium text-white">{entry.jobTitle}</span>
                       {entry.company && <span className="ml-2 text-sm text-gray-400">at {entry.company}</span>}
                       <span className="ml-3 text-xs text-gray-500">{entry.date}</span>
                       <span className="ml-3 text-xs text-gray-500 capitalize">{entry.outputType.replace('_', ' ')}</span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className={`text-sm font-bold ${entry.score >= 70 ? 'text-green-400' : entry.score >= 45 ? 'text-yellow-400' : 'text-red-400'}`}>
+                    <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+                      <span className={`text-sm font-bold tabular-nums ${scoreColor(entry.score)}`}>
                         {entry.score}%
                       </span>
                       <span className="text-gray-600 text-xs">{expandedHistory === entry.id ? '▲' : '▼'}</span>
@@ -592,13 +622,18 @@ export default function Home() {
                   </button>
                   {expandedHistory === entry.id && (
                     <div className="px-6 pb-6 border-t border-gray-800 flex flex-col gap-5">
-                      <p className="text-xs text-gray-400 mt-4">{entry.reason}</p>
+                      <p className="text-xs text-gray-400 mt-4 leading-relaxed">{entry.reason}</p>
 
                       {entry.companyResearch && (
                         <div>
                           <div className="flex justify-between items-center mb-2">
                             <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Company Research</label>
-                            <button onClick={() => copyToClipboard(entry.companyResearch!)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
+                            <button
+                              onClick={() => copyToClipboard(entry.companyResearch!, `research-${entry.id}`)}
+                              className={`text-xs transition-colors ${copiedKey === `research-${entry.id}` ? 'text-green-400' : 'text-blue-400 hover:text-blue-300'}`}
+                            >
+                              {copiedKey === `research-${entry.id}` ? '✓ copied' : 'copy'}
+                            </button>
                           </div>
                           <p className="text-sm text-gray-300 leading-relaxed select-text">{entry.companyResearch}</p>
                         </div>
@@ -608,7 +643,12 @@ export default function Home() {
                         <div>
                           <div className="flex justify-between items-center mb-2">
                             <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Tailored Bullets</label>
-                            <button onClick={() => copyToClipboard(entry.tailoredBullets)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
+                            <button
+                              onClick={() => copyToClipboard(entry.tailoredBullets, `bullets-${entry.id}`)}
+                              className={`text-xs transition-colors ${copiedKey === `bullets-${entry.id}` ? 'text-green-400' : 'text-blue-400 hover:text-blue-300'}`}
+                            >
+                              {copiedKey === `bullets-${entry.id}` ? '✓ copied' : 'copy'}
+                            </button>
                           </div>
                           <p className="text-sm text-gray-300 whitespace-pre-wrap select-text">{entry.tailoredBullets}</p>
                         </div>
@@ -619,7 +659,12 @@ export default function Home() {
                           <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
                             {entry.outputType === 'cover_letter' ? 'Cover Letter' : 'Outreach Email'}
                           </label>
-                          <button onClick={() => copyToClipboard(entry.email)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
+                          <button
+                            onClick={() => copyToClipboard(entry.email, `email-${entry.id}`)}
+                            className={`text-xs transition-colors ${copiedKey === `email-${entry.id}` ? 'text-green-400' : 'text-blue-400 hover:text-blue-300'}`}
+                          >
+                            {copiedKey === `email-${entry.id}` ? '✓ copied' : 'copy'}
+                          </button>
                         </div>
                         <p className="text-sm text-gray-200 whitespace-pre-wrap select-text">{entry.email}</p>
                       </div>
