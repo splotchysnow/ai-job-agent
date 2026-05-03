@@ -88,10 +88,12 @@ def draft_email(request: DraftRequest, client: Anthropic = Depends(get_client)):
         if request.company_research else ""
     )
 
+    honesty_rule = " CRITICAL: Only use facts that appear explicitly in the candidate's resume highlights. Never invent years of experience, skills, projects, or achievements not mentioned. If something isn't in the resume, don't say it."
+
     if request.output_type == "cover_letter":
-        system = f"You are a professional cover letter writer. Write a formal, well-structured cover letter for a {request.job_area} job application. Include an opening paragraph, 2-3 body paragraphs highlighting relevant experience and why this company specifically, and a closing paragraph. Plain text only, no markdown. Sign off as {request.first_name} {request.last_name}.{research_instruction}"
+        system = f"You are a professional cover letter writer. Write a formal, well-structured cover letter for a {request.job_area} job application. Include an opening paragraph, 2-3 body paragraphs highlighting relevant experience and why this company specifically, and a closing paragraph. Plain text only, no markdown. Sign off as {request.first_name} {request.last_name}.{research_instruction}{honesty_rule}"
     else:
-        system = f"You are a professional outreach writer. Write a concise, genuine cold outreach email for a {request.job_area} job application. Sound human, not corporate. 2-3 short paragraphs max. No subject line. No markdown — plain text only. Sign off as {request.first_name} {request.last_name}.{research_instruction}"
+        system = f"You are a professional outreach writer. Write a concise, genuine cold outreach email for a {request.job_area} job application. Sound human, not corporate. 2-3 short paragraphs max. No subject line. No markdown — plain text only. Sign off as {request.first_name} {request.last_name}.{research_instruction}{honesty_rule}"
 
     content = f"Job description:\n{request.job_description}"
     if request.company_research:

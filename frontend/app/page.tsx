@@ -25,6 +25,7 @@ export default function Home() {
   const [jobTitle, setJobTitle] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [extracting, setExtracting] = useState(false);
+  const [autoExtract, setAutoExtract] = useState(true);
   const [tailoredBullets, setTailoredBullets] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -47,6 +48,8 @@ export default function Home() {
     setApiKey(localStorage.getItem('apiKey') || '');
     const saved = localStorage.getItem('jobHistory');
     if (saved) setHistory(JSON.parse(saved));
+    const ae = localStorage.getItem('autoExtract');
+    if (ae !== null) setAutoExtract(ae === 'true');
   }, []);
 
   function handleFirstNameChange(val: string) {
@@ -81,6 +84,7 @@ export default function Home() {
   }
 
   async function extractJobInfo() {
+    if (!autoExtract) return;
     if (jobDescription.length < 100) return;
     setExtracting(true);
     const res = await fetch(`${API_BASE}/extract-job-info`, {
@@ -288,18 +292,9 @@ export default function Home() {
                 />
               </div>
               <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="text-xs text-gray-500">
-                    Company {extracting && <span className="text-gray-600">· detecting...</span>}
-                  </label>
-                  <button
-                    onClick={researchCompany}
-                    disabled={researching || !companyName}
-                    className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-40 transition-colors"
-                  >
-                    {researching ? 'researching...' : 'Research'}
-                  </button>
-                </div>
+                <label className="text-xs text-gray-500 mb-1.5 block">
+                  Company {extracting && <span className="text-gray-600">· detecting...</span>}
+                </label>
                 <input
                   className="w-full bg-gray-800 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
                   placeholder="auto-detected"
@@ -347,7 +342,7 @@ export default function Home() {
         )}
 
         {/* Toggles */}
-        <div className="flex items-center gap-6 mb-4">
+        <div className="flex items-center gap-6 mb-4 flex-wrap">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowBullets(!showBullets)}
@@ -357,6 +352,26 @@ export default function Home() {
             </button>
             <span className="text-sm text-gray-400">Show tailored bullets</span>
           </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                const next = !autoExtract;
+                setAutoExtract(next);
+                localStorage.setItem('autoExtract', String(next));
+              }}
+              className={`w-10 h-6 rounded-full transition-colors ${autoExtract ? 'bg-blue-600' : 'bg-gray-700'} relative`}
+            >
+              <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${autoExtract ? 'left-5' : 'left-1'}`} />
+            </button>
+            <span className="text-sm text-gray-400">Auto-extract job info</span>
+          </div>
+          <button
+            onClick={researchCompany}
+            disabled={researching || !companyName}
+            className="px-4 py-1.5 rounded-lg text-sm font-medium bg-gray-900 border border-gray-800 text-gray-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {researching ? 'Researching...' : 'Research Company'}
+          </button>
           <div className="flex items-center gap-2 bg-gray-900 rounded-xl p-1 border border-gray-800">
             <button
               onClick={() => setOutputType('email')}
@@ -376,10 +391,10 @@ export default function Home() {
         {/* Run Button */}
         <button
           onClick={runAgent}
-          disabled={loading || !jobDescription}
+          disabled={loading || extracting || !jobDescription}
           className="w-full py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-white transition-colors mb-6"
         >
-          {loading ? 'Running agent...' : 'Run Agent'}
+          {loading ? 'Running agent...' : extracting ? 'Detecting job info...' : 'Run Agent'}
         </button>
 
         {/* Output */}
