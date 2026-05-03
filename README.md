@@ -1,6 +1,6 @@
 # AI Job Application Agent
 
-An AI-powered job application assistant that takes a job description and your resume, then generates tailored resume bullets, a personalized outreach email, and a match score instantly.
+An AI-powered job application assistant. Paste a job description, import your resume, and get a match score, tailored bullets, and a personalized outreach email or cover letter — with optional company research to make it feel genuine.
 
 ## Stack
 
@@ -12,13 +12,16 @@ An AI-powered job application assistant that takes a job description and your re
 
 ## Features
 
-- Paste a job description and get tailored resume bullets in seconds
-- Generates a personalized cold outreach email
-- Match score (0-100%) showing how well your resume fits the job
-- Job area selector (Software Engineering, Product, Design, Data Science, etc.)
-- Name and resume bullets persist via localStorage
-- Redis caching on tailor endpoint to avoid redundant API calls
-- Fully deployed — frontend on Vercel, backend on Railway
+- **Match score** — rates how well your resume fits the job (0–100%) with a plain-English explanation
+- **Tailored bullets** — rewrites your master resume bullets to match the job description
+- **Email or cover letter** — generates a personalized cold outreach email or formal cover letter
+- **Company research** — looks up what the company does and weaves relevant details into the email/letter naturally
+- **Auto-extract job info** — detects job title and company name from the pasted job description
+- **Resume import** — upload a PDF or DOCX and it pulls the text straight into the resume field
+- **Bring your own API key** — optionally use your own Anthropic key; falls back to the shared key
+- **Job history** — every run is saved locally with the score, date, job title, company, and generated output
+- **Redis caching** on the tailor endpoint to avoid redundant API calls
+- **Rate limiting** — 50 requests per IP per hour
 
 ## Local Development
 
@@ -72,9 +75,12 @@ uvicorn main:app --reload
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Health check |
-| POST | `/tailor` | Tailor resume bullets to job description |
-| POST | `/draft` | Generate personalized outreach email |
-| POST | `/match` | Score resume match against job (0-100) |
+| POST | `/tailor` | Tailor resume bullets to a job description (Redis cached) |
+| POST | `/draft` | Generate outreach email or cover letter |
+| POST | `/match` | Score resume fit against job (0–100) |
+| POST | `/research` | Research a company via web search |
+| POST | `/extract-job-info` | Extract job title and company name from a job description |
+| POST | `/extract` | Extract plain text from a PDF or DOCX file |
 
 ## Deployment
 
@@ -87,7 +93,5 @@ uvicorn main:app --reload
 ### Backend `.env`
 ```
 ANTHROPIC_API_KEY=your_key_here
-USER_FIRST_NAME=first_name_here
-USER_LAST_NAME=last_name_here
 REDIS_URL=your_redis_url
 ```
