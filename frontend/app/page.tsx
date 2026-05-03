@@ -65,6 +65,12 @@ export default function Home() {
     if (thresh !== null) setMatchThreshold(Number(thresh));
   }, []);
 
+  useEffect(() => {
+    if (!companyName) return;
+    const stored = localStorage.getItem(`research:${companyName.toLowerCase().trim()}`);
+    if (stored) setCompanyResearch(stored);
+  }, [companyName]);
+
   function handleFirstNameChange(val: string) {
     setFirstName(val);
     localStorage.setItem('firstName', val);
@@ -128,6 +134,7 @@ export default function Home() {
     });
     const data = await res.json();
     setCompanyResearch(data.summary);
+    localStorage.setItem(`research:${companyName.toLowerCase().trim()}`, data.summary);
     setResearching(false);
   }
 
@@ -396,13 +403,26 @@ export default function Home() {
         {/* Company Research Panel */}
         {companyResearch && (
           <div className="bg-gray-900 rounded-2xl p-5 border border-gray-800 mb-4">
-            <div className="flex justify-between items-center mb-3">
+            <div className="flex justify-between items-center mb-4">
               <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-                Company Research — {companyName}
+                Talking Points — {companyName}
               </label>
               <button onClick={() => setCompanyResearch(null)} className="text-xs text-gray-500 hover:text-gray-400 transition-colors">dismiss</button>
             </div>
-            <p className="text-sm text-gray-200 leading-relaxed select-text">{companyResearch}</p>
+            <div className="flex flex-col gap-3">
+              {companyResearch.split('\n').filter(l => l.trim()).map((line, i) => {
+                const [fact, usage] = line.replace(/^•\s*/, '').split(' - ');
+                return (
+                  <div key={i} className="flex gap-3">
+                    <span className="text-blue-500 mt-0.5 flex-shrink-0">•</span>
+                    <div>
+                      <span className="text-sm text-gray-100 select-text">{fact?.trim()}</span>
+                      {usage && <span className="text-sm text-gray-500 select-text"> — {usage.trim()}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

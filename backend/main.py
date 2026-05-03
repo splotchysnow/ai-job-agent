@@ -91,7 +91,7 @@ def tailor_resume(request: TailorRequest, client: Anthropic = Depends(get_client
 @app.post("/draft")
 def draft_email(request: DraftRequest, client: Anthropic = Depends(get_client)):
     research_instruction = (
-        " Company research is provided — weave in 1-2 specific details naturally to show genuine interest. Don't list facts; make them feel organic to the message."
+        " Specific company talking points are provided — pick 1-2 that connect naturally to the candidate's background and weave them into the email. Make them feel genuine, not like a checklist."
         if request.company_research else ""
     )
 
@@ -173,26 +173,27 @@ def clean_resume(request: CleanResumeRequest, client: Anthropic = Depends(get_cl
     redis_client.setex(cache_key, 86400 * 7, json.dumps(result))
     return result
 
-# Looks up a company using Claude's web_search tool and returns a plain-prose summary
-# covering what they do, company stage, culture, and recent news.
-# Redis-cached for 24hr — company info is stable and web search is expensive.
+# Researches a company and returns 3-4 job-application-specific talking points.
+# Each point is a concrete fact paired with a note on how to use it in an outreach email.
+# Redis-cached for 24hr — v2 cache key forces refresh from old prose format.
 @app.post("/research")
 def research_company(request: ResearchRequest, client: Anthropic = Depends(get_client)):
-    cache_key = "research:" + hashlib.md5(f"{request.company_name}+{request.job_area or ''}".encode()).hexdigest()
+    cache_key = "research:v2:" + hashlib.md5(f"{request.company_name}+{request.job_area or ''}".encode()).hexdigest()
     cached = redis_client.get(cache_key)
     if cached:
         return json.loads(cached)
 
+    job_area = request.job_area or "tech"
     messages = [{
         "role": "user",
-        "content": f"Research the company '{request.company_name}'. Summarize: what they do, their products/services, company size and stage, culture/values, and any recent notable news or initiatives. Keep it to 150-200 words."
+        "content": f"Research '{request.company_name}' for someone applying to a {job_area} role. Find 3-4 specific, current talking points they could naturally weave into a cold outreach email to show genuine interest. Focus on: recent funding or milestones, notable products or launches, engineering or company culture signals, what makes them stand out. Skip generic facts like employee count or founding year unless they're remarkable. For each point explain briefly how a candidate could use it."
     }]
 
     for _ in range(8):
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=1024,
-            system="You are a company research assistant. Write in plain prose only — no markdown, no headers, no bold, no bullet points. Just clean paragraphs.",
+            system=f"You are a job application coach helping someone research a company before reaching out. Return exactly 3-4 bullet points starting with •. Each bullet: one specific, current fact about the company, then a dash, then one sentence on how a {job_area} candidate could reference it naturally in an outreach email. No intros, no prose, no headers — just the bullets.",
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=messages
         )
@@ -203,7 +204,6 @@ def research_company(request: ResearchRequest, client: Anthropic = Depends(get_c
                 .replace('__', '')
                 .replace('## ', '')
                 .replace('# ', '')
-                .replace('* ', '')
                 .strip())
             result = {"summary": text}
             redis_client.setex(cache_key, 86400, json.dumps(result))
