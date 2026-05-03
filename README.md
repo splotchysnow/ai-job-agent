@@ -1,31 +1,35 @@
 # AI Job Application Agent
 
-An AI-powered job application assistant. Paste a job description, import your resume, and get a match score, tailored bullets, and a personalized outreach email or cover letter — with optional company research to make it feel genuine.
+Paste a job description, drop in your resume, and get a match score, tailored bullets, and a personalized outreach email or cover letter in seconds. Optional company research pulls live info about the company and weaves it into the output naturally.
 
 ## Stack
 
-- **Frontend** — Next.js, TypeScript, Tailwind CSS (deployed on Vercel)
-- **Backend** — FastAPI, Python (deployed on Railway)
-- **Cache** — Redis (Railway managed)
-- **AI** — Claude API (Anthropic)
-- **Infrastructure** — Docker, Docker Compose
+| Layer | Tech |
+|---|---|
+| Frontend | Next.js, TypeScript, Tailwind CSS |
+| Backend | FastAPI, Python |
+| AI | Claude (Anthropic) |
+| Cache | Redis |
+| Infra | Docker, Docker Compose |
+| Hosting | Vercel (frontend), Railway (backend + Redis) |
 
 ## Features
 
-- **Match score** — rates how well your resume fits the job (0–100%) with a plain-English explanation
-- **Tailored bullets** — rewrites your master resume bullets to match the job description
-- **Email or cover letter** — generates a personalized cold outreach email or formal cover letter
-- **Company research** — looks up what the company does and weaves relevant details into the email/letter naturally
-- **Auto-extract job info** — detects job title and company name from the pasted job description
-- **Resume import** — upload a PDF or DOCX and it pulls the text straight into the resume field
-- **Bring your own API key** — optionally use your own Anthropic key; falls back to the shared key
-- **Job history** — every run is saved locally with the score, date, job title, company, and generated output
-- **Redis caching** on the tailor endpoint to avoid redundant API calls
+- **Match score** — rates how well your resume fits the job (0-100) with a plain-English explanation of what fits and what's missing
+- **Tailored bullets** — rewrites your master resume bullets to best match the job; never invents facts not in your original resume
+- **Email or cover letter** — generates a concise cold outreach email or a formal cover letter, your choice
+- **Company research** — live web search summary of what the company does, woven naturally into the output
+- **Auto-extract job info** — detects the job title and company name from the pasted description automatically (can be toggled off to save API cost)
+- **Resume import** — upload a PDF or DOCX and the text lands straight into the resume field
+- **Bring your own API key** — paste your own Anthropic key to use your own quota; falls back to the shared key if left blank
+- **Job history** — every run is saved in the browser with the score, output, tailored bullets, company research, and the full job description
+- **Redis caching** — match scores, tailored bullets, job info extraction, and company research are all cached to avoid redundant API calls
 - **Rate limiting** — 50 requests per IP per hour
 
 ## Local Development
 
 ### Prerequisites
+
 - Docker Desktop
 - Node.js 18+
 - Python 3.11+
@@ -39,58 +43,61 @@ An AI-powered job application assistant. Paste a job description, import your re
    cd ai-job-agent
    ```
 
-2. Set up backend environment
+2. Configure the backend
    ```bash
    cd backend
    cp .env.example .env
-   # Add your ANTHROPIC_API_KEY to .env
+   # Fill in ANTHROPIC_API_KEY in .env
    ```
 
-3. Run with Docker Compose
+3. Start the backend and Redis
    ```bash
    cd ..
    docker compose up --build
    ```
 
-4. Run frontend
+4. Start the frontend
    ```bash
    cd frontend
    npm install
    npm run dev
    ```
 
-5. Open `http://localhost:3000`
+5. Open [http://localhost:3000](http://localhost:3000)
 
-### Backend only (without Docker)
+### Backend without Docker
+
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
+> Redis is required for caching and rate limiting. You can run it locally with `docker run -p 6379:6379 redis`.
+
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| POST | `/tailor` | Tailor resume bullets to a job description (Redis cached) |
-| POST | `/draft` | Generate outreach email or cover letter |
-| POST | `/match` | Score resume fit against job (0–100) |
-| POST | `/research` | Research a company via web search |
-| POST | `/extract-job-info` | Extract job title and company name from a job description |
-| POST | `/extract` | Extract plain text from a PDF or DOCX file |
+| Method | Endpoint | Description | Cached |
+|--------|----------|-------------|--------|
+| GET | `/health` | Liveness check | - |
+| POST | `/match` | Score resume fit against a job (0-100) | 1hr |
+| POST | `/tailor` | Rewrite resume bullets to match the job | 1hr |
+| POST | `/draft` | Generate outreach email or cover letter | - |
+| POST | `/extract-job-info` | Extract job title and company from a job description | 24hr |
+| POST | `/research` | Research a company via live web search | 24hr |
+| POST | `/extract` | Extract plain text from a PDF or DOCX upload | - |
 
 ## Deployment
 
-- **Frontend** → Vercel (auto-deploys on push to main)
-- **Backend** → Railway (deploy via `railway up`)
-- **Redis** → Railway managed database
+- **Frontend** — Vercel, auto-deploys on push to `main`
+- **Backend** — Railway (`railway up`)
+- **Redis** — Railway managed database
 
 ## Environment Variables
 
-### Backend `.env`
+**`backend/.env`**
 ```
 ANTHROPIC_API_KEY=your_key_here
 REDIS_URL=your_redis_url
