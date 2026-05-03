@@ -56,6 +56,7 @@ class DraftRequest(BaseModel):
     first_name: str = None
     last_name: str = None
     job_area: str = None
+    company_name: str = None
     output_type: str = "email"
     company_research: str = None
 
@@ -74,7 +75,7 @@ def tailor_resume(request: TailorRequest, client: Anthropic = Depends(get_client
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
-        system=f"You are a resume coach specializing in {request.job_area}. Given resume bullets and a job description, rewrite and select the most relevant bullets tailored to the job. Output 4-6 strong bullet points starting with action verbs. Label each bullet with the company/experience it comes from in brackets before the bullet, like [SOL Automatic]. Output only the bullets, no preamble.",
+        system=f"You are a resume coach specializing in {request.job_area}. Given resume bullets and a job description, rewrite and select the most relevant bullets tailored to the job. Output 4-6 strong bullet points starting with action verbs. Label each bullet with the company/experience it comes from in brackets before the bullet, like [SOL Automatic]. Output only the bullets, no preamble. CRITICAL: Only rewrite bullets from the provided resume. Never invent new achievements, metrics, technologies, or experiences not present in the original bullets.",
         messages=[{"role": "user", "content": f"Job Description: {request.job_description}\n\nResume Bullets: {request.resume_bullets}\n\nTailor the resume bullets to better fit the job description."}]
     )
     result = message.content[0].text
@@ -88,12 +89,14 @@ def draft_email(request: DraftRequest, client: Anthropic = Depends(get_client)):
         if request.company_research else ""
     )
 
-    honesty_rule = " CRITICAL: Only use facts that appear explicitly in the candidate's resume highlights. Never invent years of experience, skills, projects, or achievements not mentioned. If something isn't in the resume, don't say it."
+    company = request.company_name or "the company"
+    honesty_rule = " CRITICAL: Only use facts that appear explicitly in the candidate's resume highlights. Never invent years of experience, skills, projects, or achievements not mentioned. If something is not in the resume, do not say it."
+    formatting_rule = " Plain text only. No markdown, no bullet points, no em dashes (—), no en dashes (–). Use commas and periods instead."
 
     if request.output_type == "cover_letter":
-        system = f"You are a professional cover letter writer. Write a formal, well-structured cover letter for a {request.job_area} job application. Include an opening paragraph, 2-3 body paragraphs highlighting relevant experience and why this company specifically, and a closing paragraph. Plain text only, no markdown. Sign off as {request.first_name} {request.last_name}.{research_instruction}{honesty_rule}"
+        system = f"You are a professional cover letter writer. Write a formal, well-structured cover letter for a {request.job_area} position. Start with 'Dear {company} Hiring Team,' on the first line. Include an opening paragraph, 2-3 body paragraphs highlighting relevant experience and why this company specifically, and a closing paragraph. Sign off as {request.first_name} {request.last_name}.{research_instruction}{honesty_rule}{formatting_rule}"
     else:
-        system = f"You are a professional outreach writer. Write a concise, genuine cold outreach email for a {request.job_area} job application. Sound human, not corporate. 2-3 short paragraphs max. No subject line. No markdown — plain text only. Sign off as {request.first_name} {request.last_name}.{research_instruction}{honesty_rule}"
+        system = f"You are a professional outreach writer. Write a concise, genuine cold outreach email for a {request.job_area} position. Start with 'Hi {company} team,' on the first line. Sound human, not corporate. 2-3 short paragraphs max. No subject line. Sign off as {request.first_name} {request.last_name}.{research_instruction}{honesty_rule}{formatting_rule}"
 
     content = f"Job description:\n{request.job_description}"
     if request.company_research:

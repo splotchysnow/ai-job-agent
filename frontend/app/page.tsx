@@ -13,6 +13,9 @@ type HistoryEntry = {
   reason: string;
   email: string;
   outputType: 'email' | 'cover_letter';
+  jobDescription: string;
+  tailoredBullets: string;
+  companyResearch: string | null;
 };
 
 export default function Home() {
@@ -38,6 +41,8 @@ export default function Home() {
   const [importing, setImporting] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
+  const [historyPage, setHistoryPage] = useState(0);
+  const HISTORY_PAGE_SIZE = 10;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -186,9 +191,13 @@ export default function Home() {
       reason: matchData.reason,
       email: cleanEmail,
       outputType,
+      jobDescription,
+      tailoredBullets: bullets,
+      companyResearch,
     };
-    const newHistory = [entry, ...history].slice(0, 20);
+    const newHistory = [entry, ...history].slice(0, 100);
     setHistory(newHistory);
+    setHistoryPage(0);
     localStorage.setItem('jobHistory', JSON.stringify(newHistory));
   }
 
@@ -198,6 +207,7 @@ export default function Home() {
 
   function clearHistory() {
     setHistory([]);
+    setHistoryPage(0);
     localStorage.removeItem('jobHistory');
   }
 
@@ -444,11 +454,14 @@ export default function Home() {
         {history.length > 0 && (
           <div className="mt-10">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-white">History</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold text-white">History</h2>
+                <span className="text-xs text-gray-500">{history.length} run{history.length !== 1 ? 's' : ''}</span>
+              </div>
               <button onClick={clearHistory} className="text-xs text-gray-500 hover:text-red-400 transition-colors">Clear all</button>
             </div>
             <div className="flex flex-col gap-3">
-              {history.map(entry => (
+              {history.slice(historyPage * HISTORY_PAGE_SIZE, (historyPage + 1) * HISTORY_PAGE_SIZE).map(entry => (
                 <div key={entry.id} className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
                   <button
                     className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-800 transition-colors"
@@ -468,20 +481,71 @@ export default function Home() {
                     </div>
                   </button>
                   {expandedHistory === entry.id && (
-                    <div className="px-6 pb-6 border-t border-gray-800">
-                      <p className="text-xs text-gray-400 mt-4 mb-4">{entry.reason}</p>
-                      <div className="flex justify-between items-center mb-2">
-                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-                          {entry.outputType === 'cover_letter' ? 'Cover Letter' : 'Outreach Email'}
-                        </label>
-                        <button onClick={() => copyToClipboard(entry.email)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
+                    <div className="px-6 pb-6 border-t border-gray-800 flex flex-col gap-5">
+                      <p className="text-xs text-gray-400 mt-4">{entry.reason}</p>
+
+                      {entry.companyResearch && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Company Research</label>
+                            <button onClick={() => copyToClipboard(entry.companyResearch!)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
+                          </div>
+                          <p className="text-sm text-gray-300 leading-relaxed">{entry.companyResearch}</p>
+                        </div>
+                      )}
+
+                      {entry.tailoredBullets && (
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Tailored Bullets</label>
+                            <button onClick={() => copyToClipboard(entry.tailoredBullets)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
+                          </div>
+                          <p className="text-sm text-gray-300 whitespace-pre-wrap">{entry.tailoredBullets}</p>
+                        </div>
+                      )}
+
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+                            {entry.outputType === 'cover_letter' ? 'Cover Letter' : 'Outreach Email'}
+                          </label>
+                          <button onClick={() => copyToClipboard(entry.email)} className="text-xs text-blue-400 hover:text-blue-300">copy</button>
+                        </div>
+                        <p className="text-sm text-gray-200 whitespace-pre-wrap">{entry.email}</p>
                       </div>
-                      <p className="text-sm text-gray-200 whitespace-pre-wrap">{entry.email}</p>
+
+                      {entry.jobDescription && (
+                        <div>
+                          <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">Job Description</label>
+                          <p className="text-xs text-gray-500 whitespace-pre-wrap max-h-40 overflow-y-auto leading-relaxed">{entry.jobDescription}</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               ))}
             </div>
+            {history.length > HISTORY_PAGE_SIZE && (
+              <div className="flex items-center justify-between mt-4">
+                <button
+                  onClick={() => setHistoryPage(p => Math.max(0, p - 1))}
+                  disabled={historyPage === 0}
+                  className="px-4 py-2 text-sm text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  ← Prev
+                </button>
+                <span className="text-xs text-gray-500">
+                  {historyPage * HISTORY_PAGE_SIZE + 1}–{Math.min((historyPage + 1) * HISTORY_PAGE_SIZE, history.length)} of {history.length}
+                </span>
+                <button
+                  onClick={() => setHistoryPage(p => p + 1)}
+                  disabled={(historyPage + 1) * HISTORY_PAGE_SIZE >= history.length}
+                  className="px-4 py-2 text-sm text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next →
+                </button>
+              </div>
+            )}
           </div>
         )}
 
