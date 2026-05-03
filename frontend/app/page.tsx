@@ -159,7 +159,7 @@ export default function Home() {
       headers: apiHeaders(),
       body: JSON.stringify({
         job_description: jobDescription,
-        tailored_bullets: bullets,
+        tailored_bullets: bullets || resumeBullets,
         first_name: firstName,
         last_name: lastName,
         job_area: jobArea,
