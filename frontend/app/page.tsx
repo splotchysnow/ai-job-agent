@@ -39,6 +39,8 @@ export default function Home() {
   const [companyResearch, setCompanyResearch] = useState<string | null>(null);
   const [researching, setResearching] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [matchThreshold, setMatchThreshold] = useState(65);
+  const [awaitingProceed, setAwaitingProceed] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
   const [historyPage, setHistoryPage] = useState(0);
@@ -55,6 +57,8 @@ export default function Home() {
     if (saved) setHistory(JSON.parse(saved));
     const ae = localStorage.getItem('autoExtract');
     if (ae !== null) setAutoExtract(ae === 'true');
+    const thresh = localStorage.getItem('matchThreshold');
+    if (thresh !== null) setMatchThreshold(Number(thresh));
   }, []);
 
   function handleFirstNameChange(val: string) {
@@ -80,6 +84,12 @@ export default function Home() {
   function handleApiKeyChange(val: string) {
     setApiKey(val);
     localStorage.setItem('apiKey', val);
+  }
+
+  function handleThresholdChange(val: number) {
+    const clamped = Math.min(100, Math.max(0, val));
+    setMatchThreshold(clamped);
+    localStorage.setItem('matchThreshold', String(clamped));
   }
 
   function apiHeaders(): Record<string, string> {
@@ -137,6 +147,7 @@ export default function Home() {
     setTailoredBullets('');
     setEmail('');
     setMatchScore(null);
+    setAwaitingProceed(false);
 
     const matchRes = await fetch(`${API_BASE}/match`, {
       method: 'POST',
@@ -145,6 +156,19 @@ export default function Home() {
     });
     const matchData = await matchRes.json();
     setMatchScore(matchData);
+
+    if (matchData.score < matchThreshold) {
+      setAwaitingProceed(true);
+      setLoading(false);
+      return;
+    }
+
+    await continuePipeline(matchData);
+  }
+
+  async function continuePipeline(matchData: { score: number; reason: string }) {
+    setAwaitingProceed(false);
+    setLoading(true);
 
     let bullets = '';
     if (showBullets) {
@@ -168,6 +192,7 @@ export default function Home() {
         first_name: firstName,
         last_name: lastName,
         job_area: jobArea,
+        company_name: companyName,
         output_type: outputType,
         company_research: companyResearch ?? undefined,
       }),
@@ -353,6 +378,18 @@ export default function Home() {
 
         {/* Toggles */}
         <div className="flex items-center gap-6 mb-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-400">Min. score</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={matchThreshold}
+              onChange={e => handleThresholdChange(Number(e.target.value))}
+              className="w-14 bg-gray-800 rounded-lg px-2 py-1 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors text-center select-text"
+            />
+            <span className="text-sm text-gray-400">%</span>
+          </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowBullets(!showBullets)}
@@ -419,6 +456,27 @@ export default function Home() {
                   </div>
                   <p className="text-sm text-gray-300 leading-relaxed select-text">{matchScore.reason}</p>
                 </div>
+                {awaitingProceed && (
+                  <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between">
+                    <p className="text-sm text-yellow-400">
+                      Score is below your {matchThreshold}% threshold. Proceed anyway?
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => continuePipeline(matchScore)}
+                        className="px-4 py-1.5 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                      >
+                        Proceed
+                      </button>
+                      <button
+                        onClick={() => setAwaitingProceed(false)}
+                        className="px-4 py-1.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
