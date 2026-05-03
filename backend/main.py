@@ -47,6 +47,9 @@ class TailorRequest(BaseModel):
     resume_bullets: str
     job_area: str
 
+class ExtractJobInfoRequest(BaseModel):
+    job_description: str
+
 class DraftRequest(BaseModel):
     job_description: str
     tailored_bullets: str = None
@@ -54,6 +57,7 @@ class DraftRequest(BaseModel):
     last_name: str = None
     job_area: str = None
     output_type: str = "email"
+    company_research: str = None
 
 class MatchRequest(BaseModel):
     job_description: str
@@ -84,13 +88,37 @@ def draft_email(request: DraftRequest, client: Anthropic = Depends(get_client)):
     else:
         system = f"You are a professional outreach writer. Write a concise, genuine cold outreach email for a {request.job_area} job application. Sound human, not corporate. 2-3 short paragraphs max. No subject line. No markdown formatting — plain text only. Sign off as {request.first_name} {request.last_name}."
 
+    content = f"Job description:\n{request.job_description}\n\nMy tailored resume highlights:\n{request.tailored_bullets}"
+    if request.company_research:
+        content += f"\n\nCompany research (use this to personalise the message):\n{request.company_research}"
+
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
         system=system,
-        messages=[{"role": "user", "content": f"Job description:\n{request.job_description}\n\nMy tailored resume highlights:\n{request.tailored_bullets}"}]
+        messages=[{"role": "user", "content": content}]
     )
     return {"email": message.content[0].text}
+
+@app.post("/extract-job-info")
+def extract_job_info(request: ExtractJobInfoRequest, client: Anthropic = Depends(get_client)):
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=64,
+        system="Extract the job title and company name from the job description. Respond in this exact format:\nJOB_TITLE: [title or null]\nCOMPANY: [company name or null]",
+        messages=[{"role": "user", "content": request.job_description}]
+    )
+    text = message.content[0].text
+    job_title = None
+    company_name = None
+    for line in text.split('\n'):
+        if line.startswith('JOB_TITLE:'):
+            val = line.replace('JOB_TITLE:', '').strip()
+            job_title = None if val.lower() in ('null', 'unknown', 'n/a', '') else val
+        elif line.startswith('COMPANY:'):
+            val = line.replace('COMPANY:', '').strip()
+            company_name = None if val.lower() in ('null', 'unknown', 'n/a', '') else val
+    return {"job_title": job_title, "company_name": company_name}
 
 class ResearchRequest(BaseModel):
     company_name: str

@@ -19,11 +19,12 @@ export default function Home() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [jobArea, setJobArea] = useState('Software Engineering');
-  const [jobTitle, setJobTitle] = useState('');
-  const [companyName, setCompanyName] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [resumeBullets, setResumeBullets] = useState('');
   const [apiKey, setApiKey] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [extracting, setExtracting] = useState(false);
   const [tailoredBullets, setTailoredBullets] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,11 +32,11 @@ export default function Home() {
   const [showBullets, setShowBullets] = useState(false);
   const [matchScore, setMatchScore] = useState<{ score: number; reason: string } | null>(null);
   const [outputType, setOutputType] = useState<'email' | 'cover_letter'>('email');
+  const [companyResearch, setCompanyResearch] = useState<string | null>(null);
+  const [researching, setResearching] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [researching, setResearching] = useState(false);
-  const [companyResearch, setCompanyResearch] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -73,10 +74,53 @@ export default function Home() {
     localStorage.setItem('apiKey', val);
   }
 
-  function apiHeaders(): HeadersInit {
-    const headers: HeadersInit = { 'Content-Type': 'application/json' };
-    if (apiKey) (headers as Record<string, string>)['X-API-Key'] = apiKey;
+  function apiHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['X-API-Key'] = apiKey;
     return headers;
+  }
+
+  async function extractJobInfo() {
+    if (jobDescription.length < 100) return;
+    setExtracting(true);
+    const res = await fetch(`${API_BASE}/extract-job-info`, {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ job_description: jobDescription }),
+    });
+    const data = await res.json();
+    if (data.job_title) setJobTitle(data.job_title);
+    if (data.company_name) setCompanyName(data.company_name);
+    setExtracting(false);
+  }
+
+  async function researchCompany() {
+    if (!companyName) return;
+    setResearching(true);
+    setCompanyResearch(null);
+    const res = await fetch(`${API_BASE}/research`, {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ company_name: companyName, job_area: jobArea }),
+    });
+    const data = await res.json();
+    setCompanyResearch(data.summary);
+    setResearching(false);
+  }
+
+  async function handleFileImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    const headers: Record<string, string> = {};
+    if (apiKey) headers['X-API-Key'] = apiKey;
+    const res = await fetch(`${API_BASE}/extract`, { method: 'POST', headers, body: formData });
+    const data = await res.json();
+    handleResumeBulletsChange(data.text);
+    setImporting(false);
+    e.target.value = '';
   }
 
   async function runAgent() {
@@ -116,6 +160,7 @@ export default function Home() {
         last_name: lastName,
         job_area: jobArea,
         output_type: outputType,
+        company_research: companyResearch ?? undefined,
       }),
     });
     const draftData = await draftRes.json();
@@ -145,37 +190,6 @@ export default function Home() {
 
   function copyToClipboard(text: string) {
     navigator.clipboard.writeText(text);
-  }
-
-  async function researchCompany() {
-    if (!companyName) return;
-    setResearching(true);
-    setCompanyResearch(null);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (apiKey) headers['X-API-Key'] = apiKey;
-    const res = await fetch(`${API_BASE}/research`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ company_name: companyName, job_area: jobArea }),
-    });
-    const data = await res.json();
-    setCompanyResearch(data.summary);
-    setResearching(false);
-  }
-
-  async function handleFileImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImporting(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    const headers: Record<string, string> = {};
-    if (apiKey) headers['X-API-Key'] = apiKey;
-    const res = await fetch(`${API_BASE}/extract`, { method: 'POST', headers, body: formData });
-    const data = await res.json();
-    handleResumeBulletsChange(data.text);
-    setImporting(false);
-    e.target.value = '';
   }
 
   function clearHistory() {
@@ -232,50 +246,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Job Row */}
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800">
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">Job Title</label>
-            <input
-              className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
-              placeholder="Software Engineer"
-              value={jobTitle}
-              onChange={e => setJobTitle(e.target.value)}
-            />
-          </div>
-          <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800">
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Company</label>
-              <button
-                onClick={researchCompany}
-                disabled={researching || !companyName}
-                className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-40 transition-colors"
-              >
-                {researching ? 'researching...' : 'Research'}
-              </button>
-            </div>
-            <input
-              className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
-              placeholder="Acme Corp"
-              value={companyName}
-              onChange={e => setCompanyName(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {/* Company Research Panel */}
-        {companyResearch && (
-          <div className="bg-gray-900 rounded-2xl p-5 border border-gray-800 mb-4">
-            <div className="flex justify-between items-center mb-3">
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-                Company Research — {companyName}
-              </label>
-              <button onClick={() => setCompanyResearch(null)} className="text-xs text-gray-500 hover:text-gray-400 transition-colors">dismiss</button>
-            </div>
-            <p className="text-sm text-gray-200 leading-relaxed">{companyResearch}</p>
-          </div>
-        )}
-
         {/* API Key Row */}
         <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 mb-6">
           <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">
@@ -291,7 +261,9 @@ export default function Home() {
         </div>
 
         {/* Input Grid */}
-        <div className="grid grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-2 gap-6 mb-4">
+
+          {/* Job Description */}
           <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3 block">Job Description</label>
             <textarea
@@ -300,8 +272,45 @@ export default function Home() {
               placeholder="Paste the job description here..."
               value={jobDescription}
               onChange={e => setJobDescription(e.target.value)}
+              onBlur={extractJobInfo}
             />
+            {/* Extracted job metadata */}
+            <div className="mt-4 pt-4 border-t border-gray-800 grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1.5 block">
+                  Job Title {extracting && <span className="text-gray-600">· detecting...</span>}
+                </label>
+                <input
+                  className="w-full bg-gray-800 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
+                  placeholder="auto-detected"
+                  value={jobTitle}
+                  onChange={e => setJobTitle(e.target.value)}
+                />
+              </div>
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-xs text-gray-500">
+                    Company {extracting && <span className="text-gray-600">· detecting...</span>}
+                  </label>
+                  <button
+                    onClick={researchCompany}
+                    disabled={researching || !companyName}
+                    className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-40 transition-colors"
+                  >
+                    {researching ? 'researching...' : 'Research'}
+                  </button>
+                </div>
+                <input
+                  className="w-full bg-gray-800 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
+                  placeholder="auto-detected"
+                  value={companyName}
+                  onChange={e => setCompanyName(e.target.value)}
+                />
+              </div>
+            </div>
           </div>
+
+          {/* Resume Bullets */}
           <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
             <div className="flex justify-between items-center mb-3">
               <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Resume Bullets</label>
@@ -323,6 +332,19 @@ export default function Home() {
             />
           </div>
         </div>
+
+        {/* Company Research Panel */}
+        {companyResearch && (
+          <div className="bg-gray-900 rounded-2xl p-5 border border-gray-800 mb-4">
+            <div className="flex justify-between items-center mb-3">
+              <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+                Company Research — {companyName}
+              </label>
+              <button onClick={() => setCompanyResearch(null)} className="text-xs text-gray-500 hover:text-gray-400 transition-colors">dismiss</button>
+            </div>
+            <p className="text-sm text-gray-200 leading-relaxed">{companyResearch}</p>
+          </div>
+        )}
 
         {/* Toggles */}
         <div className="flex items-center gap-6 mb-4">
