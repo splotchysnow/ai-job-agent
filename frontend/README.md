@@ -87,7 +87,7 @@ uvicorn main:app --reload
 ### Backend `.env`
 ```
 ANTHROPIC_API_KEY=your_key_here
-USER_FIRST_NAME=Guan
-USER_LAST_NAME=Li
+USER_FIRST_NAME=first_name_here
+USER_LAST_NAME=last_name_here
 REDIS_URL=your_redis_url
 ```

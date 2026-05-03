@@ -213,7 +213,7 @@ export default function Home() {
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">First Name</label>
             <input
               className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
-              placeholder="Guan"
+              placeholder="first_name_here"
               value={firstName}
               onChange={e => handleFirstNameChange(e.target.value)}
             />
@@ -222,7 +222,7 @@ export default function Home() {
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2 block">Last Name</label>
             <input
               className="w-full bg-gray-800 rounded-xl px-4 py-2 text-sm text-gray-100 outline-none border border-gray-700 focus:border-blue-500 transition-colors"
-              placeholder="Li"
+              placeholder="last_name_here"
               value={lastName}
               onChange={e => handleLastNameChange(e.target.value)}
             />
