@@ -3,17 +3,24 @@ import io
 import json
 import hashlib
 
-from fastapi import FastAPI, Request, HTTPException, Header, Depends, File, UploadFile
+from fastapi import FastAPI, Query, Request, HTTPException, Header, Depends, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from anthropic import Anthropic
 from dotenv import load_dotenv
 import redis
+from enum import Enum
+from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests 
 
 load_dotenv()
 
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(redis_url)
+
+JSEARCH_API_KEY = os.getenv("JSEARCH_API_KEY")
+
 
 app = FastAPI()
 
@@ -24,6 +31,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+class DatePosted(str, Enum):
+    hours_24 = "24hours"
+    days_3   = "3days"
+    week_1   = "1week"
+    weeks_2  = "2weeks"
+
+class JobRecommendationRequest(BaseModel):
+    resume_bullets: str
+    job_area: str
+    max_page: int = 10
+    date_posted: DatePosted = DatePosted.week_1
+
+class QuickMatchRequest(BaseModel):
+    job_description: str
+    resume_bullets: str
+
+JSEARCH_DATE_MAP = {
+    DatePosted.hours_24: "today",
+    DatePosted.days_3:   "3days",
+    DatePosted.week_1:   "week",
+    DatePosted.weeks_2:  "month",
+}
+
+CUTOFF_MAP = {
+    DatePosted.hours_24: timedelta(hours=24),
+    DatePosted.days_3:   timedelta(days=3),
+    DatePosted.week_1:   timedelta(weeks=1),
+    DatePosted.weeks_2:  timedelta(weeks=2),
+}
+
+def is_within_cutoff(posted_at: str | None, cutoff: timedelta) -> bool:
+    if not posted_at:
+        return True
+    try:
+        posted_dt = datetime.fromisoformat(posted_at.replace("Z", "+00:00"))
+        return datetime.now(timezone.utc) - posted_dt <= cutoff
+    except ValueError:
+        return True
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
     ip = request.client.host
@@ -263,3 +309,115 @@ def match_jobs(request: MatchRequest, client: Anthropic = Depends(get_client)):
     result = {"score": score, "reason": reason}
     redis_client.setex(cache_key, 3600, json.dumps(result))
     return result
+
+
+@app.post("/match/score")
+def quick_match(request: QuickMatchRequest, client: Anthropic = Depends(get_client)):
+    cache_key = "quickmatch:" + hashlib.md5(f"{request.job_description}+{request.resume_bullets}".encode()).hexdigest()
+    cached = redis_client.get(cache_key)
+    if cached:
+        return json.loads(cached)
+
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=5,   # a number 0-100 is at most 3 tokens, give a tiny buffer
+        system="You are a hiring manager. Score how well the candidate's resume matches the job from 0-100. Reply with ONLY the number. No text, no explanation.",
+        messages=[{"role": "user", "content": f"Job Description:\n{request.job_description}\n\nCandidate Resume:\n{request.resume_bullets}"}]
+    )
+
+    score = int(''.join(filter(str.isdigit, message.content[0].text.strip())))
+    result = {"score": score}
+    redis_client.setex(cache_key, 3600, json.dumps(result))
+    return result
+
+
+
+def score_job(job: dict, resume_bullets: str, client: Anthropic) -> dict:
+    try:
+        cache_key = "quickmatch:" + hashlib.md5(f"{job['description']}+{resume_bullets}".encode()).hexdigest()
+        cached = redis_client.get(cache_key)
+        if cached:
+            job["matchScore"] = json.loads(cached)["score"]
+            return job
+
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=5,
+            system="You are a hiring manager. Score how well the candidate's resume matches the job from 0-100. Reply with ONLY the number. No text, no explanation.",
+            messages=[{"role": "user", "content": f"Job Description:\n{job['description']}\n\nCandidate Resume:\n{resume_bullets}"}]
+        )
+
+        score = int(''.join(filter(str.isdigit, message.content[0].text.strip())))
+        redis_client.setex(cache_key, 3600, json.dumps({"score": score}))
+        job["matchScore"] = score
+    except Exception as e:
+        print(f"Failed to score job {job.get('id')}: {e}")
+        job["matchScore"] = 0
+
+    return job
+
+@app.post("/jobs/recommendations")
+def recommend_jobs(request: JobRecommendationRequest, client: Anthropic = Depends(get_client)):
+
+    API_KEY = JSEARCH_API_KEY
+    url = "https://jsearch.p.rapidapi.com/search"
+    headers = {
+        "X-RapidAPI-Key": API_KEY,
+        "X-RapidAPI-Host": "jsearch.p.rapidapi.com"
+    }
+
+    jsearch_filter = JSEARCH_DATE_MAP[request.date_posted]
+    cutoff = CUTOFF_MAP[request.date_posted]
+    query = request.job_area
+
+    all_jobs = []
+
+    for page in range(1, request.max_page + 1):
+        querystring = {
+            "query": query,
+            "num_pages": "1",
+            "page": str(page),
+            "date_posted": jsearch_filter
+        }
+
+        try:
+            response = requests.get(url, headers=headers, params=querystring, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"An error occurred while fetching jobs: {e}")
+            raise HTTPException(status_code=502, detail=f"Error fetching job recommendations on Page {page}: {str(e)}")
+
+        job_fetched = data.get("data", [])
+
+        if not job_fetched:
+            break
+
+        for job in job_fetched:
+            all_jobs.append({
+                "id": job.get("job_id"),
+                "title": job.get("job_title"),
+                "company": job.get("employer_name"),
+                "location": f"{job.get('job_city')}, {job.get('job_state')}",
+                "salary": job.get("job_salary"),
+                "matchScore": 0,
+                "matchReason": "",
+                "url": job.get("job_apply_link"),
+                "postedAt": job.get("job_posted_at_datetime_utc"),
+                "description": job.get("job_description"),
+            })
+
+    # Filter by date first, then only score what survives
+    filtered_jobs = [j for j in all_jobs if is_within_cutoff(j["postedAt"], cutoff)]
+
+    # Score concurrently
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [
+            executor.submit(score_job, job, request.resume_bullets, client)
+            for job in filtered_jobs
+        ]
+        scored_jobs = [f.result() for f in as_completed(futures)]
+
+    scored_jobs.sort(key=lambda j: j["matchScore"], reverse=True)
+
+    return {"total": len(scored_jobs), "jobs": scored_jobs}
