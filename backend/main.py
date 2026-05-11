@@ -471,6 +471,9 @@ def _run_fetch(task_id: str, session_id: str, request: FetchRequest):
         except Exception:
             pass
 
+    def _clean(s):
+        return s.replace('\x00', '') if isinstance(s, str) else s
+
     def _upsert_jobs(conn, jobs: list):
         nonlocal total_fetched
         with conn.cursor() as cur:
@@ -487,12 +490,12 @@ def _run_fetch(task_id: str, session_id: str, request: FetchRequest):
                         title = EXCLUDED.title, company = EXCLUDED.company,
                         description = EXCLUDED.description, fetched_at = NOW()
                 """, (
-                    job_id, job.get("job_title"), job.get("employer_name"),
-                    f"{job.get('job_city')}, {job.get('job_state')}",
+                    job_id, _clean(job.get("job_title")), _clean(job.get("employer_name")),
+                    _clean(f"{job.get('job_city')}, {job.get('job_state')}"),
                     job.get("job_min_salary") or job.get("job_salary"),
                     job.get("job_apply_link"),
                     job.get("job_posted_at_datetime_utc"),
-                    job.get("job_description"), request.job_area,
+                    _clean(job.get("job_description")), request.job_area,
                 ))
                 if job_id:
                     cur.execute(
