@@ -1,216 +1,311 @@
 'use client';
 
-// This page is a simple interface to fetch and display job recommendations from the backend.
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 
-
-// BASE for every API URL
 const API_BASE = 'https://ai-job-agent-production-5cc3.up.railway.app';
 
-// Structure of a job recommendation returned by the API
-type Job = {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  salary?: string; // ? because not all APIs return salary info
-  matchScore: number;
-  matchReason: string;
-  url: string;
-  postedAt: string;
-  description: string;
+type FetchStatus = {
+  status: 'running' | 'done' | 'error';
+  page: number;
+  total_pages: number;
+  fetched: number;
+  error?: string;
 };
 
-// Main page component
-export default function JobFetchPage() {
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [lastFetched, setLastFetched] = useState<string | null>(null);
-  const [minScore, setMinScore] = useState(60);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [apiKey, setApiKey] = useState('');
+type Session = {
+  id: string;
+  name: string;
+  status: 'running' | 'done' | 'error';
+  job_count: number;
+  created_at: string;
+};
 
-  // On mount, load API key and cached results from localStorage
+export default function JobFetchPage() {
+  const [jobTitle, setJobTitle] = useState('Software Engineer');
+  const [location, setLocation] = useState('');
+  const [remoteOnly, setRemoteOnly] = useState(false);
+  const [datePosted, setDatePosted] = useState<'24hours' | '3days' | '1week' | '2weeks'>('1week');
+  const [maxPages, setMaxPages] = useState(5);
+  const [sessionName, setSessionName] = useState('');
+
+  const [fetchStatus, setFetchStatus] = useState<FetchStatus | null>(null);
+  const [fetchLoading, setFetchLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
-    // Load API key from localStorage (if set in the agent interface)
-    setApiKey(localStorage.getItem('apiKey') || '');
-    // Load cached job results and timestamp
-    const cached = localStorage.getItem('jobFetchResults');
-    const ts = localStorage.getItem('jobFetchTimestamp');
-    // If we have cached results, load them into state immediately
-    if (cached) setJobs(JSON.parse(cached));
-    if (ts) setLastFetched(ts);
+    loadSessions();
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
-  function apiHeaders(): Record<string, string> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (apiKey) headers['X-API-Key'] = apiKey;
-    return headers;
+  async function loadSessions() {
+    setSessionsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/jobs/sessions`);
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(data.sessions ?? []);
+      }
+    } catch {
+      // silently ignore — sessions table may not exist yet
+    } finally {
+      setSessionsLoading(false);
+    }
   }
 
-  async function fetchJobs() {
-    setLoading(true);
-    const resumeBullets = localStorage.getItem('resumeBullets') || '';
-    const jobArea = localStorage.getItem('jobArea') || 'Software Engineering';
-
-    // TODO: replace with your actual endpoint
-    const res = await fetch(`${API_BASE}/jobs/recommendations`, {
-      method: 'POST',
-      headers: apiHeaders(),
-      body: JSON.stringify({ resume_bullets: resumeBullets, job_area: jobArea }),
-    });
-    const data: Job[] = await res.json();
-
-    const sorted = data.sort((a, b) => b.matchScore - a.matchScore);
-    const ts = new Date().toLocaleString();
-    setJobs(sorted);
-    setLastFetched(ts);
-    localStorage.setItem('jobFetchResults', JSON.stringify(sorted));
-    localStorage.setItem('jobFetchTimestamp', ts);
-    setLoading(false);
+  async function startFetch() {
+    setFetchLoading(true);
+    setFetchStatus(null);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/jobs/fetch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_area: jobTitle,
+          location,
+          remote_only: remoteOnly,
+          date_posted: datePosted,
+          max_page: maxPages,
+          name: sessionName,
+        }),
+      });
+      if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
+      const { task_id } = await res.json();
+      pollStatus(task_id);
+    } catch (e) {
+      setError(String(e));
+      setFetchLoading(false);
+    }
   }
 
-  function scoreColor(score: number) {
-    if (score >= 75) return 'text-green-400';
-    if (score >= 55) return 'text-yellow-400';
-    return 'text-red-400';
+  function pollStatus(taskId: string) {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/jobs/fetch/status/${taskId}`);
+        if (!res.ok) return;
+        const status: FetchStatus = await res.json();
+        setFetchStatus(status);
+        if (status.status === 'done' || status.status === 'error') {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          setFetchLoading(false);
+          if (status.status === 'error') setError(status.error || 'Fetch failed');
+          loadSessions();
+        }
+      } catch {
+        clearInterval(pollRef.current!);
+        pollRef.current = null;
+        setFetchLoading(false);
+      }
+    }, 2000);
   }
 
-  function scoreBg(score: number) {
-    if (score >= 75) return 'bg-green-900/40 border-green-700/50';
-    if (score >= 55) return 'bg-yellow-900/40 border-yellow-700/50';
-    return 'bg-red-900/40 border-red-700/50';
-  }
+  const fetchProgress = fetchStatus
+    ? Math.round((fetchStatus.page / Math.max(fetchStatus.total_pages, 1)) * 100)
+    : 0;
 
-  const visible = jobs.filter(j => j.matchScore >= minScore);
+  function statusDot(s: Session['status']) {
+    if (s === 'done') return 'bg-green-500';
+    if (s === 'error') return 'bg-red-500';
+    return 'bg-yellow-400 animate-pulse';
+  }
 
   return (
     <main className="min-h-screen bg-gray-950 text-white p-8 select-none">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-3xl mx-auto">
 
         {/* Header */}
         <div className="mb-8 flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white">Job Recommendations</h1>
-            <p className="text-gray-500 mt-1 text-sm">Daily job matches from the last 2 weeks, ranked by resume fit.</p>
+            <h1 className="text-3xl font-bold text-white">Fetch Jobs</h1>
+            <p className="text-gray-500 mt-1 text-sm">Pull jobs from JSearch into the database as a named session.</p>
           </div>
-          <Link
-            href="/"
-            className="text-sm text-gray-400 hover:text-white transition-colors mt-1"
-          >
-            ← Back to agent
-          </Link>
+          <div className="flex gap-3 mt-1">
+            <Link href="/job-match" className="text-sm text-violet-400 hover:text-violet-300 transition-colors">
+              Match Resume →
+            </Link>
+            <Link href="/" className="text-sm text-gray-400 hover:text-white transition-colors">
+              ← Back
+            </Link>
+          </div>
         </div>
 
-        {/* Control bar */}
-        <div className="bg-gray-900 rounded-2xl p-5 border border-gray-800 mb-6 flex flex-wrap items-center gap-6">
-          <button
-            onClick={fetchJobs}
-            disabled={loading}
-            className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 disabled:text-blue-400 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
-          >
-            {loading ? 'Fetching…' : 'Fetch & Match Jobs'}
-          </button>
+        {/* Error banner */}
+        {error && (
+          <div className="mb-4 bg-red-900/40 border border-red-700/50 rounded-xl px-4 py-3 text-sm text-red-300 flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-white ml-4">✕</button>
+          </div>
+        )}
 
-          <div className="flex items-center gap-3 flex-1 min-w-[200px]">
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-widest whitespace-nowrap">
-              Min Score: <span className="text-white">{minScore}</span>
-            </label>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={minScore}
-              onChange={e => setMinScore(Number(e.target.value))}
-              className="flex-1 accent-blue-500"
-            />
+        {/* Fetch form */}
+        <div className="bg-gray-900 rounded-2xl p-5 border border-gray-800 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Job Title</label>
+              <input
+                type="text"
+                value={jobTitle}
+                onChange={e => setJobTitle(e.target.value)}
+                disabled={fetchLoading}
+                placeholder="e.g. Software Engineer"
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Location <span className="text-gray-600">(optional)</span></label>
+              <input
+                type="text"
+                value={location}
+                onChange={e => setLocation(e.target.value)}
+                disabled={fetchLoading}
+                placeholder="e.g. San Diego, CA"
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Date Posted</label>
+              <select
+                value={datePosted}
+                onChange={e => setDatePosted(e.target.value as typeof datePosted)}
+                disabled={fetchLoading}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              >
+                <option value="24hours">Last 24 hours</option>
+                <option value="3days">Last 3 days</option>
+                <option value="1week">Last week</option>
+                <option value="2weeks">Last 2 weeks</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Pages <span className="text-gray-400">({maxPages * 10} jobs max)</span></label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range" min={1} max={10} value={maxPages}
+                  onChange={e => setMaxPages(Number(e.target.value))}
+                  disabled={fetchLoading}
+                  className="flex-1 accent-blue-500"
+                />
+                <span className="text-sm text-white w-4 text-right">{maxPages}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1 sm:col-span-2">
+              <label className="text-xs text-gray-500">Session Name <span className="text-gray-600">(optional — auto-generated if blank)</span></label>
+              <input
+                type="text"
+                value={sessionName}
+                onChange={e => setSessionName(e.target.value)}
+                disabled={fetchLoading}
+                placeholder={`${jobTitle || 'Software Engineer'}${location ? ' · ' + location : ''} · 1wk`}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+              />
+            </div>
           </div>
 
-          <div className="text-right text-xs text-gray-500 whitespace-nowrap">
-            {lastFetched ? (
-              <>
-                <span className="text-gray-400">{visible.length} match{visible.length !== 1 ? 'es' : ''}</span>
-                <span className="mx-2 text-gray-700">·</span>
-                last fetched {lastFetched}
-              </>
-            ) : (
-              <span>No data yet — hit fetch to start</span>
+          <div className="flex items-center gap-4 flex-wrap">
+            <button
+              onClick={startFetch}
+              disabled={fetchLoading || !jobTitle.trim()}
+              className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 disabled:text-blue-400 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
+            >
+              {fetchLoading ? 'Fetching…' : 'Fetch Jobs'}
+            </button>
+
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <div
+                onClick={() => !fetchLoading && setRemoteOnly(r => !r)}
+                className={`w-9 h-5 rounded-full transition-colors ${remoteOnly ? 'bg-blue-600' : 'bg-gray-700'} ${fetchLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <div className={`w-4 h-4 bg-white rounded-full mt-0.5 transition-transform ${remoteOnly ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+              </div>
+              <span className="text-xs text-gray-400">Remote only</span>
+            </label>
+
+            {fetchStatus && (
+              <div className="flex-1 min-w-[200px]">
+                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                  <span>
+                    {fetchStatus.status === 'done'
+                      ? `Done — ${fetchStatus.fetched} jobs cached`
+                      : fetchStatus.status === 'error'
+                      ? `Error: ${fetchStatus.error}`
+                      : `Page ${fetchStatus.page} / ${fetchStatus.total_pages} · ${fetchStatus.fetched} jobs`}
+                  </span>
+                  <span>{fetchProgress}%</span>
+                </div>
+                <div className="w-full bg-gray-800 rounded-full h-1.5">
+                  <div
+                    className={`h-1.5 rounded-full transition-all duration-500 ${fetchStatus.status === 'error' ? 'bg-red-500' : fetchStatus.status === 'done' ? 'bg-green-500' : 'bg-blue-500'}`}
+                    style={{ width: `${fetchProgress}%` }}
+                  />
+                </div>
+              </div>
             )}
           </div>
         </div>
 
-        {/* Job list */}
-        {visible.length === 0 && !loading && (
-          <div className="text-center py-24 text-gray-600 text-sm">
-            {jobs.length > 0
-              ? `All ${jobs.length} jobs are below the ${minScore} score threshold. Lower the slider to see them.`
-              : 'No jobs loaded yet. Click "Fetch & Match Jobs" above.'}
+        {/* Session history */}
+        <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Search Sessions</p>
+            <button onClick={loadSessions} disabled={sessionsLoading} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+              {sessionsLoading ? 'Loading…' : '↻ Refresh'}
+            </button>
           </div>
-        )}
 
-        <div className="flex flex-col gap-4">
-          {visible.map(job => (
-            <div
-              key={job.id}
-              className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden"
-            >
-              {/* Card header */}
-              <div className="p-5 flex items-start gap-4">
-                {/* Score badge */}
-                <div className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-16 rounded-xl border text-center ${scoreBg(job.matchScore)}`}>
-                  <span className={`text-xl font-bold leading-none ${scoreColor(job.matchScore)}`}>{job.matchScore}</span>
-                  <span className="text-[10px] text-gray-400 mt-0.5">match</span>
-                </div>
-
-                {/* Main info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-base font-semibold text-white truncate">{job.title}</h2>
-                    {job.salary && (
-                      <span className="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded-lg">{job.salary}</span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-400 mt-0.5">
-                    {job.company}
-                    <span className="mx-1.5 text-gray-700">·</span>
-                    {job.location}
-                    <span className="mx-1.5 text-gray-700">·</span>
-                    <span className="text-gray-500">{job.postedAt}</span>
-                  </p>
-                  <p className="text-xs text-gray-500 mt-2 leading-relaxed line-clamp-2">{job.matchReason}</p>
-                </div>
-
-                {/* Actions */}
-                <div className="flex-shrink-0 flex flex-col items-end gap-2">
-                  <a
-                    href={job.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
-                  >
-                    Apply
-                  </a>
-                  <button
-                    onClick={() => setExpanded(expanded === job.id ? null : job.id)}
-                    className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
-                  >
-                    {expanded === job.id ? 'Hide details' : 'Show details'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Expanded description */}
-              {expanded === job.id && (
-                <div className="border-t border-gray-800 px-5 py-4">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Job Description</p>
-                  <pre className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed select-text font-sans">
-                    {job.description}
-                  </pre>
-                </div>
-              )}
+          {sessions.length === 0 ? (
+            <div className="px-5 py-10 text-center text-gray-600 text-sm">
+              {sessionsLoading ? 'Loading sessions…' : 'No sessions yet — run a fetch above.'}
             </div>
-          ))}
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-gray-500 uppercase tracking-wider border-b border-gray-800">
+                  <th className="px-5 py-3 text-left font-medium">Name</th>
+                  <th className="px-4 py-3 text-right font-medium">Jobs</th>
+                  <th className="px-4 py-3 text-left font-medium">Date</th>
+                  <th className="px-4 py-3 text-right font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((s, i) => (
+                  <tr key={s.id} className={`${i < sessions.length - 1 ? 'border-b border-gray-800/60' : ''} hover:bg-gray-800/40 transition-colors`}>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDot(s.status)}`} />
+                        <span className="text-white truncate max-w-[220px]">{s.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right text-gray-400">{s.job_count}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                      {new Date(s.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {s.status === 'done' && s.job_count > 0 && (
+                        <Link
+                          href={`/job-match?session_id=${s.id}&session_name=${encodeURIComponent(s.name)}`}
+                          className="text-xs text-violet-400 hover:text-violet-300 transition-colors font-medium"
+                        >
+                          Match →
+                        </Link>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
 
       </div>
