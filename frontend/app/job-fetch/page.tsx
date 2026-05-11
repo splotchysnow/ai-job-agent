@@ -50,9 +50,11 @@ export default function JobFetchPage() {
       if (res.ok) {
         const data = await res.json();
         setSessions(data.sessions ?? []);
+      } else {
+        setError(`Sessions unavailable (${res.status})`);
       }
-    } catch {
-      // silently ignore — sessions table may not exist yet
+    } catch (e) {
+      setError(`Could not reach backend: ${e}`);
     } finally {
       setSessionsLoading(false);
     }
