@@ -436,6 +436,10 @@ def _fetch_job_details(job_id: str) -> str | None:
         return None
 
 
+def _clean(s):
+    return s.replace('\x00', '') if isinstance(s, str) else s
+
+
 def _run_fetch(task_id: str, session_id: str, request: FetchRequest):
     """Fetches jobs from JSearch (V2 single-call, falls back to V1 pagination) and upserts into NeonDB."""
     from db import get_conn
@@ -470,9 +474,6 @@ def _run_fetch(task_id: str, session_id: str, request: FetchRequest):
                 c.close()
         except Exception:
             pass
-
-    def _clean(s):
-        return s.replace('\x00', '') if isinstance(s, str) else s
 
     def _upsert_jobs(conn, jobs: list):
         nonlocal total_fetched
@@ -557,6 +558,34 @@ def _run_fetch(task_id: str, session_id: str, request: FetchRequest):
                 if not jobs:
                     break
                 _upsert_jobs(conn, jobs)
+
+            # Enrich jobs that have no description — search results often omit it.
+            if JSEARCH_API_KEY:
+                conn2 = get_conn()
+                try:
+                    with conn2.cursor() as cur:
+                        cur.execute("""
+                            SELECT j.id FROM jobs j
+                            JOIN session_jobs sj ON j.id = sj.job_id
+                            WHERE sj.session_id = %s
+                            AND (j.description IS NULL OR length(j.description) < 50)
+                        """, (session_id,))
+                        missing = [row["id"] for row in cur.fetchall()]
+                    if missing:
+                        _set_status("running", request.max_page, error=None)
+                        with ThreadPoolExecutor(max_workers=3) as executor:
+                            futures = {executor.submit(_fetch_job_details, jid): jid for jid in missing}
+                            with conn2.cursor() as cur:
+                                for future in as_completed(futures):
+                                    desc = future.result()
+                                    if desc:
+                                        cur.execute(
+                                            "UPDATE jobs SET description = %s WHERE id = %s",
+                                            (_clean(desc), futures[future]),
+                                        )
+                            conn2.commit()
+                finally:
+                    conn2.close()
 
         finally:
             conn.close()
@@ -647,6 +676,29 @@ def match_from_db(request: DbMatchRequest, client: Anthropic = Depends(get_clien
         raise HTTPException(status_code=503, detail=str(e))
 
     try:
+        # Enrich any jobs still missing descriptions before scoring.
+        if JSEARCH_API_KEY:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT j.id FROM jobs j
+                    JOIN session_jobs sj ON j.id = sj.job_id
+                    WHERE sj.session_id = %s
+                    AND (j.description IS NULL OR length(j.description) < 50)
+                """, (request.session_id,))
+                missing = [row["id"] for row in cur.fetchall()]
+            if missing:
+                with ThreadPoolExecutor(max_workers=3) as executor:
+                    futures = {executor.submit(_fetch_job_details, jid): jid for jid in missing}
+                    with conn.cursor() as cur:
+                        for future in as_completed(futures):
+                            desc = future.result()
+                            if desc:
+                                cur.execute(
+                                    "UPDATE jobs SET description = %s WHERE id = %s",
+                                    (_clean(desc), futures[future]),
+                                )
+                conn.commit()
+
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT j.id, j.description FROM jobs j
@@ -655,6 +707,7 @@ def match_from_db(request: DbMatchRequest, client: Anthropic = Depends(get_clien
                 AND NOT EXISTS (
                     SELECT 1 FROM job_scores s WHERE s.job_id = j.id AND s.resume_hash = %s
                 )
+                AND j.description IS NOT NULL AND length(j.description) >= 50
             """, (request.session_id, resume_hash))
             unscored = cur.fetchall()
 
