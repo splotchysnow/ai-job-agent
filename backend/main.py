@@ -15,7 +15,7 @@ import redis
 from enum import Enum
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import requests 
+import requests
 
 load_dotenv()
 
@@ -349,8 +349,8 @@ def match_jobs(request: MatchRequest, client: Anthropic = Depends(get_client)):
         ]}]
     )
     text = message.content[0].text
-    score_line = [l for l in text.split('\n') if l.startswith('SCORE:')][0]
-    reason_line = [l for l in text.split('\n') if l.startswith('REASON:')][0]
+    score_line = [line for line in text.split('\n') if line.startswith('SCORE:')][0]
+    reason_line = [line for line in text.split('\n') if line.startswith('REASON:')][0]
     score = int(''.join(filter(str.isdigit, score_line)))
     reason = reason_line.replace('REASON:', '').strip()
     result = {"score": score, "reason": reason}

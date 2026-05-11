@@ -15,9 +15,9 @@ _redis_mock.expire.return_value = True
 
 patch("redis.from_url", return_value=_redis_mock).start()
 
-import pytest
-from fastapi.testclient import TestClient
-from main import app, get_client
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from main import app, get_client  # noqa: E402
 
 
 _anthropic_mock = MagicMock()
