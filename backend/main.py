@@ -531,6 +531,7 @@ def _run_fetch(task_id: str, session_id: str, request: FetchRequest):
                 pass  # V2 unavailable or rate-limited — fall through to V1
 
             # V1 fallback — paginate one page at a time
+            consecutive_failures = 0
             for page in range(1, request.max_page + 1):
                 _set_status("running", page)
                 try:
@@ -539,17 +540,19 @@ def _run_fetch(task_id: str, session_id: str, request: FetchRequest):
                         headers=jsearch_headers,
                         params={"query": query, "num_pages": "1",
                                 "page": str(page), "date_posted": jsearch_filter},
-                        timeout=10,
+                        timeout=20,
                     )
                     resp.raise_for_status()
                     payload = resp.json()
                     jobs = payload.get("data", []) if isinstance(payload, dict) else []
                     if not isinstance(jobs, list):
                         jobs = []
-                except requests.exceptions.RequestException as e:
-                    _update_session("error")
-                    _set_status("error", page, str(e))
-                    return
+                    consecutive_failures = 0
+                except requests.exceptions.RequestException:
+                    consecutive_failures += 1
+                    if consecutive_failures >= 3:
+                        break  # give up after 3 consecutive failures
+                    continue  # skip this page and try the next
 
                 if not jobs:
                     break
